@@ -9,7 +9,10 @@ import streamlit as st
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))  # `streamlit run` only puts dispatch/ on the path
 
-from dispatch import llm  # noqa: E402
+try:  # llm.py is owned by a teammate; the dashboard must still load without it
+    from dispatch import llm  # noqa: E402
+except Exception:
+    llm = None
 
 OUT = ROOT / "dispatch" / "outputs"
 CREW_COLORS = [  # one per crew, readable on a light basemap
@@ -73,6 +76,43 @@ def replan(plan_8am: dict, metrics: dict, event: dict) -> dict:
         return {"error": f"{type(e).__name__}: {e}"}
 
 
+# --- llm wrappers (contract signatures only; fall back if llm.py fails) ------
+
+EVENTS = ("crew_out", "crew_partial", "unclear")
+
+
+def safe_parse(text: str) -> tuple[dict | None, str | None]:
+    """llm.parse_event(text) checked against the contract. Returns (event, error)."""
+    try:
+        ev = llm.parse_event(text)
+        if not isinstance(ev, dict) or ev.get("event") not in EVENTS:
+            raise ValueError(f"unexpected result {ev!r}")
+        if ev["event"] != "unclear" and ev.get("crew") not in range(1, 9):
+            raise ValueError(f"crew must be 1-8, got {ev.get('crew')!r}")
+        ev.setdefault("capacity", 0.0 if ev["event"] == "crew_out" else 0.5)
+        ev.setdefault("question", None)
+        return ev, None
+    except Exception as e:
+        return None, f"{type(e).__name__}: {e}"
+
+
+def safe_briefing(plan: dict, metrics: dict, when: str, changes: dict | None = None) -> tuple[str, bool]:
+    """llm.briefing(...) or a short numbers-only fallback. Returns (text, came_from_llm_module)."""
+    try:
+        text = llm.briefing(plan, metrics, when, changes)
+        if isinstance(text, str) and text.strip():
+            return text, True
+    except Exception:
+        pass
+    if when == "noon":
+        m = metrics["noon"]
+        return (f"Noon plan: {m['n']} jobs, {m['safety']} safety tickets. {m.get('moved', 0)} jobs moved, "
+                f"{m.get('dropped', 0)} deferred, {m.get('safety_dropped', 0)} safety tickets deferred."), False
+    m, f = metrics["8am"], metrics["fifo"]
+    return (f"8 a.m. plan: {m['n']} jobs, {m['safety']} safety tickets "
+            f"(oldest-first would cover {f['safety']})."), False
+
+
 # --- view helpers ------------------------------------------------------------
 
 def describe(event: dict) -> str:
@@ -93,17 +133,17 @@ def map_layers(plan: dict, changes: dict | None) -> list:
         color = CREW_COLORS[(c["crew"] - 1) % len(CREW_COLORS)]
         for j in c["jobs"]:
             points.append({**j, "crew": c["crew"], "zone": c["zone"], "color": color,
-                           "radius": 450 if j["safety"] else 280,
+                           "radius": 7 if j["safety"] else 4,
                            "line": [0, 0, 0] if j["id"] in moved else [255, 255, 255],
                            "status": "moved here" if j["id"] in moved else ("safety" if j["safety"] else "")})
-    dropped = [{**j, "crew": "-", "zone": "-", "color": [150, 150, 150], "radius": 280, "line": [90, 90, 90],
+    dropped = [{**j, "crew": "-", "zone": "-", "color": [150, 150, 150], "radius": 4, "line": [90, 90, 90],
                 "status": "deferred"} for j in (changes or {}).get("dropped_jobs", [])]
     centroids = [{"crew": c["crew"], "zone": c["zone"], "lat": c["centroid"][0], "lon": c["centroid"][1],
                   "label": f"Crew {c['crew']}", "color": CREW_COLORS[(c["crew"] - 1) % len(CREW_COLORS)]}
                  for c in plan["crews"]]
     common = dict(get_position="[lon, lat]", pickable=True)
     return [
-        pdk.Layer("ScatterplotLayer", points + dropped, get_fill_color="color", get_radius="radius",
+        pdk.Layer("ScatterplotLayer", points + dropped, get_fill_color="color", get_radius="radius", radius_units="'pixels'",
                   get_line_color="line", stroked=True, line_width_min_pixels=2, opacity=0.85, **common),
         pdk.Layer("TextLayer", centroids, get_text="label", get_color="color", get_size=14,
                   get_alignment_baseline="'bottom'", font_weight=700, **common),
@@ -195,10 +235,14 @@ with right:
         if view == "FIFO":
             st.write(f"Baseline: oldest tickets first, same crews and zones. It covers {m['safety']} safety "
                      f"tickets, versus {metrics['8am']['safety']} in the agent's plan.")
-        elif view == "Agent":
-            st.write(llm.briefing(data["plan_8am"], metrics, "8am"))
         else:
-            st.write(llm.briefing(plan, ss.noon["metrics"], "noon", changes, ss.noon["event"]))
+            if view == "Agent":
+                text, ok = safe_briefing(data["plan_8am"], metrics, "8am")
+            else:
+                text, ok = safe_briefing(plan, ss.noon["metrics"], "noon", changes)
+            st.write(text)
+            if not ok:
+                st.caption("Briefing service unavailable - showing the numbers only.")
 
     st.subheader("Report a crew update")
 
@@ -211,7 +255,20 @@ with right:
     st.text_area("What happened?", key="update_text", height=80,
                  placeholder="e.g. Crew 4 called in sick, they're out for the day")
     if st.button("Submit", type="primary", disabled=not ss.update_text.strip()):
-        ss.parsed = llm.parse_event(ss.update_text)
+        ss.parsed, ss.parse_error = safe_parse(ss.update_text)
+
+    if ss.get("parse_error") and not ss.parsed:
+        with st.container(border=True):
+            st.error("Couldn't read that update automatically. Pick the crew and what happened:")
+            st.caption(ss.parse_error)
+            m_crew, m_kind = st.columns(2)
+            crew = m_crew.selectbox("Crew", range(1, 9), index=3)
+            kind = m_kind.radio("Status", ["Out for the day", "Short-handed (50%)"])
+            if st.button("Use this update"):
+                ss.parsed = {"event": "crew_out" if kind.startswith("Out") else "crew_partial", "crew": crew,
+                             "capacity": 0.0 if kind.startswith("Out") else 0.5, "question": None}
+                ss.parse_error = None
+                st.rerun()
 
     if ss.parsed:
         event = ss.parsed

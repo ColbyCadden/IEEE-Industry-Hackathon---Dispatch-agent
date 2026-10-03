@@ -21,6 +21,7 @@ import threading
 import time
 import traceback
 import argparse
+import uuid
 
 # --- SUMO setup ---
 # Locate SUMO: env var first, then PATH, then the historical local install.
@@ -236,6 +237,8 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
             self._handle_call()
         elif self.path == '/tts':
             self._handle_tts()
+        elif self.path == '/call/next':
+            self._handle_call_next()
         else:
             self._send_json(404, {'error': 'Not found'})
 
@@ -330,6 +333,23 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
                                     replan_now=not body.get('wait'))
             if body.get('wait') and res.get('applied'):
                 calls.replan(blocking=True)
+            self._send_json(200, res)
+        except Exception as e:
+            self._send_json(500, {'error': str(e)})
+
+    def _handle_call_next(self):
+        """One turn of the voice call: the agent asks, the caller answers,
+        the issue and the routes update."""
+        body = self._read_json_body() or {}
+        root = os.path.normpath(os.path.join(_HERE, os.pardir, os.pardir))
+        if root not in sys.path:
+            sys.path.insert(0, root)
+        try:
+            from agents.dispatch import calls
+            res = calls.next_question(body.get('call_id') or uuid.uuid4().hex[:8],
+                                      utterance=body.get('utterance', ''),
+                                      request_id=body.get('request_id'),
+                                      action=body.get('action'))
             self._send_json(200, res)
         except Exception as e:
             self._send_json(500, {'error': str(e)})

@@ -23,21 +23,30 @@ _ABBR = {"AVENUE": "AV", "AVE": "AV", "STREET": "ST", "ROAD": "RD", "TRAIL": "TR
          "EIGHTH": "8", "NINTH": "9", "TENTH": "10"}
 _STOP = {"THE", "AT", "ON", "OF", "A", "AN", "IS", "WAS", "HAS", "BEEN", "NEAR", "THERE",
          "IT", "AND", "IN", "TO", "HAVE", "THAT", "THIS", "JUST", "NOW", "CALGARY", "AB"}
-_CAT_WORDS = {"debris": ["DEBRIS", "GARBAGE", "TRASH", "JUNK"],
-              "pothole": ["POTHOLE", "HOLE"], "sign": ["SIGN"],
-              "signal": ["SIGNAL", "LIGHT", "LIGHTS"], "dead_animal": ["ANIMAL", "DEER", "RACCOON"],
+# Spoken category words -> request category, used to reject mismatched matches.
+_CAT_WORDS = {"debris": ["DEBRIS", "GARBAGE", "TRASH", "JUNK", "WASTE"],
+              "pothole": ["POTHOLE", "HOLE"], "sign": ["SIGN", "SIGNS"],
+              "signal": ["SIGNAL", "LIGHT", "LIGHTS", "TRAFFICLIGHT"],
+              "dead_animal": ["ANIMAL", "DEER", "RACCOON", "COYOTE"],
               "markings": ["MARKING", "MARKINGS", "PAINT", "LINES"],
-              "road_maintenance": ["MAINTENANCE", "REPAIR"]}
+              "road_maintenance": ["MAINTENANCE", "REPAIR", "CONSTRUCTION"]}
 
-_WORDS = {
-    "resolved": r"picked up|pick(ed)? it up|cleared?|cleaned|removed|taken away|fixed|repaired|"
-                r"filled|replaced|gone|done|finished|resolved|all good|no longer",
-    "reopened": r"still (there|here|broken|not)|not (fixed|cleared|picked|gone|done)|came back|"
-                r"back again|again|reopen|wasn.?t",
-    "escalate": r"urgent|dangerous|danger|blocking|blocked|accident|injur|worse|emergency|"
-                r"serious|major|hazard|critical",
-    "downgrade": r"minor|not urgent|small|low priority|can wait|not a big",
+# Caller phrasing -> action. Checked in this order: urgency beats "still there",
+# so "still there and dangerous" escalates rather than merely reopening.
+_ACTION_WORDS = {
+    "escalate": r"urgent|dangerous|danger|blocking|blocked|block|accident|injur\w*|hurt|hazard|"
+                r"critical|emergency|serious|major|swerv\w*|at risk|getting worse|"
+                r"could (hit|be hurt|get hurt)|someone could|people could",
+    "reopened": r"still\b|\bnot (fixed|cleared|picked|gone|done|resolved|there)\b|came back|"
+                r"back again|reopen\w*|wasn.?t|unresolved|not yet|on the way|hasn.?t",
+    "downgrade": r"not urgent|low priority|can wait|no rush|not a big|whenever|low urgency|"
+                r"nothing urgent|non.?urgent|\bminor\b|\bminor issue\b|trivial|cosmetic|nothing dangerous|no danger",
+    "resolved": r"picked up|picked it up|cleared|cleaned|removed|taken away|fixed|repaired|"
+                r"filled|replaced|gone|done|finished|resolved|all good|no longer|sorted|"
+                r"is fine|all set",
 }
+# Negation must not leak: "it is NOT urgent" is a downgrade, not an escalation.
+_NEG = ("urgent", "dangerous", "danger", "critical", "emergency")
 
 
 def _norm(s):
@@ -51,11 +60,19 @@ def _norm(s):
 
 
 def classify(text):
-    """Transcript -> action. Order matters: 'not fixed' must beat 'fixed'."""
+    """Caller phrasing -> action, or None when nothing matched.
+
+    Checked in _ACTION_WORDS order: urgency beats "still there", so
+    "still there and dangerous" escalates instead of merely reopening.
+    """
     t = (text or "").lower()
-    for a in ("reopened", "escalate", "downgrade", "resolved"):
-        if re.search(_WORDS[a], t):
-            return a
+    for a in ("escalate", "reopened", "downgrade", "resolved"):
+        if not re.search(_ACTION_WORDS[a], t):
+            continue
+        if a == "escalate":          # "not urgent", "no danger" -> downgrade
+            negated = any(re.search(r"(not|no|isn.?t|wasn.?t|nothing)\s+" + w, t) for w in _NEG)
+            return "downgrade" if negated else "escalate"
+        return a
     return None
 
 
@@ -70,6 +87,11 @@ def match_request(text, candidates):
         for w in _CAT_WORDS.get(c.get("category", ""), []):
             if w in toks:
                 score += 1
+        # If the caller named a category and it conflicts with this candidate, reject it:
+        # "debris at 728 6 ST SW" must never match a sign request.
+        said_cats = {c for c, ws in _CAT_WORDS.items() if any(w in toks for w in ws)}
+        if said_cats and c.get("category") not in said_cats:
+            continue
         # A spoken house number that differs from the candidate's is evidence AGAINST it.
         said = {t for t in toks if t.isdigit() and len(t) >= 3}
         has = {t for t in _norm(c.get("location", "")) if t.isdigit() and len(t) >= 3}

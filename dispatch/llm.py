@@ -13,6 +13,11 @@ ENV_FILE = Path(__file__).resolve().parent.parent / ".env"  # copy .env.example 
 CREWS = 8
 USE_LLM = True  # set False to force the regex / template fallbacks
 
+try:  # new-job reading and locations live in live.py; crew updates still work without it
+    from dispatch import live as updates
+except Exception:  # pragma: no cover
+    updates = None
+
 log = logging.getLogger(__name__)
 _client = None
 # Who produced the last parse / briefing: "claude", or "fallback: <reason>". Lets the UI say
@@ -189,6 +194,11 @@ def _pairs(text: str) -> tuple[list[tuple[int, tuple]], list[tuple]]:
     return pairs, orphans
 
 
+def _job_event(spec: dict) -> dict:
+    """A new problem to add to today's plan; the location is filled in later (address, community or map click)."""
+    return {"event": "new_job", "crew": None, "capacity": 1.0, "question": None, "job": spec}
+
+
 def regex_parse_event(text: str, only_crew: int | None = None) -> dict:
     """Rule-based parse of a crew update (used offline, and to sanity-check Claude's answer).
 
@@ -211,13 +221,18 @@ def regex_parse_event(text: str, only_crew: int | None = None) -> dict:
         names = ", ".join(map(str, crews[:-1])) + f" and {crews[-1]}"
         return _event("unclear", None, 1.0, f"That mentions crews {names}. I replan one crew at a time: which one first?",
                       crews)
+    if not crews and only_crew is None and updates is not None:
+        spec = updates.rules_job(text)  # a new problem reported rather than a crew change
+        if spec:
+            return _job_event(spec)
     if not crews:
         if valid:  # only "is back / fine" statements: nothing to replan
             return _event("crew_partial", valid[-1][0], 1.0)
         if bad:
             return _event("unclear", question=f"There is no crew {bad[0]} today (crews 1-{CREWS}). Which crew is affected?")
         if not mentioned:
-            return _event("unclear", question="Which crew is affected?")
+            return _event("unclear", question="Is a crew affected (which one?), or is this a new problem to add "
+                                              "(what and where)?")
         return _event("unclear", mentioned[0], 1.0,
                       f"What's happening with crew {mentioned[0]}: out for the day, or short-handed?")
     crew = crews[0]
@@ -278,8 +293,10 @@ def _ask_claude(system: str, user: str, max_tokens: int, output_format: dict | N
 
 _EVENT_SYSTEM = (
     "You are a dispatch intake assistant for City of Calgary road crews. Read the crew update and "
-    'return ONLY a JSON object matching {"event": "crew_out"|"crew_partial"|"unclear", '
-    '"crew": int or null, "capacity": float 0-1, "question": string or null}.\n'
+    'return ONLY a JSON object matching {"event": "crew_out"|"crew_partial"|"new_job"|"unclear", '
+    '"crew": int or null, "capacity": float 0-1, "question": string or null, "job_label": string or null, '
+    '"severity": int 0-3 or null, "address": string or null, "community": string or null, '
+    '"summary": string or null}.\n'
     f"Crews are numbered 1-{CREWS}. A crew has {CREW_SIZE} people. Messages may be messy: typos, "
     "number words (crew four), 'C5', slang, or extra chatter.\n"
     '- "crew_out": the crew can do no more work today: called in sick, out, off, done for the day, left '
@@ -292,6 +309,15 @@ _EVENT_SYSTEM = (
     '- "unclear": the crew number isn\'t stated, isn\'t 1-8, the message names MORE THAN ONE crew that has '
     "a problem (the planner replans one crew at a time), or it says nothing about availability (or only "
     "that a crew is running late). capacity 1, and question is one short clarifying question (under 15 words).\n"
+    '- "new_job": the message reports a NEW problem to add to today\'s work (pothole, sinkhole, sign down, '
+    "debris, flooding, a crash, a signal out...) rather than a change in crew availability. crew null, "
+    "capacity 1, question null. job_label = a 1-3 word name for the problem. severity: 0 cosmetic or low, "
+    "1 routine nuisance or minor obstruction, 2 high (road or traffic hazard: pothole, missing or damaged "
+    "sign, signal problem), 3 emergency (imminent danger or major disruption: sinkhole, gas leak, flooding, "
+    "road collapse, downed lines or trees, a crash, or a hazard at a school or hospital with injury risk). "
+    "address = the street address or intersection copied exactly as written in the message, else null. "
+    "community = a Calgary neighbourhood if the message names one, else null. summary = one short line. "
+    "For every other event set job_label, severity, address, community and summary to null.\n"
     "Only use a crew number that appears in the message."
 )
 _EVENT_FORMAT = {
@@ -299,29 +325,60 @@ _EVENT_FORMAT = {
     "schema": {
         "type": "object",
         "properties": {
-            "event": {"type": "string", "enum": ["crew_out", "crew_partial", "unclear"]},
+            "event": {"type": "string", "enum": ["crew_out", "crew_partial", "new_job", "unclear"]},
             "crew": {"type": ["integer", "null"]},
             "capacity": {"type": "number"},
             "question": {"type": ["string", "null"]},
+            "job_label": {"type": ["string", "null"]},
+            "severity": {"type": ["integer", "null"]},
+            "address": {"type": ["string", "null"]},
+            "community": {"type": ["string", "null"]},
+            "summary": {"type": ["string", "null"]},
         },
-        "required": ["event", "crew", "capacity", "question"],
+        "required": ["event", "crew", "capacity", "question", "job_label", "severity", "address",
+                     "community", "summary"],
         "additionalProperties": False,
     },
 }
 
 
-def _valid_event(d: dict) -> dict:
+def _norm(s: str) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", (s or "").lower()).strip()
+
+
+def _valid_job(d: dict, text: str) -> dict:
+    """Claude's new_job answer, checked: severity clamped, address and community must be in the message."""
+    if updates is None:
+        raise ValueError("live.py is not available")
+    sev = d.get("severity")
+    if isinstance(sev, bool) or not isinstance(sev, int):
+        raise ValueError(f"bad severity {sev!r}")
+    label = d.get("job_label")
+    if not isinstance(label, str) or not label.strip():
+        raise ValueError("new_job without a label")
+    address = d.get("address") if isinstance(d.get("address"), str) else None
+    if address and _norm(address) not in _norm(text):
+        address = None  # Claude may not invent a location the supervisor never wrote
+    comm = d.get("community") if isinstance(d.get("community"), str) else None
+    comm = comm.upper() if comm and comm.upper() in updates.communities() and _norm(comm) in _norm(text) else None
+    comm = comm or updates.find_community(text)
+    return _job_event(updates.make_job_spec(label, sev, address, comm, d.get("summary") or ""))
+
+
+def _valid_event(d: dict, text: str = "") -> dict:
     """Return a clean event dict or raise ValueError."""
     kind, crew, cap, question = d.get("event"), d.get("crew"), d.get("capacity"), d.get("question")
-    if kind not in ("crew_out", "crew_partial", "unclear"):
+    if kind not in ("crew_out", "crew_partial", "new_job", "unclear"):
         raise ValueError(f"bad event {kind!r}")
+    if kind == "new_job":
+        return _valid_job(d, text)
     if crew is not None and (isinstance(crew, bool) or not isinstance(crew, int) or not 1 <= crew <= CREWS):
         raise ValueError(f"bad crew {crew!r}")
     if isinstance(cap, bool) or not isinstance(cap, (int, float)) or not 0 <= cap <= 1:
         raise ValueError(f"bad capacity {cap!r}")
     if question is not None and not isinstance(question, str):
         raise ValueError(f"bad question {question!r}")
-    if kind != "unclear" and crew is None:
+    if kind not in ("unclear",) and crew is None:
         raise ValueError(f"{kind} without a crew")
     if kind == "crew_out":
         cap, question = 0.0, None
@@ -353,7 +410,11 @@ def llm_parse_event(text: str, only_crew: int | None = None) -> dict:
             return dict(_parse_cache[key])
         reply = _ask_claude(_EVENT_SYSTEM, text or "", max_tokens=200, output_format=_EVENT_FORMAT)
         reply = reply.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
-        event = _valid_event(json.loads(reply))
+        event = _valid_event(json.loads(reply), text)
+        if event["event"] == "new_job" and rules["event"] in ("crew_out", "crew_partial"):
+            raise ValueError("Claude read a crew update as a new job")
+        if rules["event"] == "new_job" and event["event"] != "new_job":
+            raise ValueError("the rules found a new job and Claude did not")
         named = _named_crews(text)
         if event["crew"] is not None and named and event["crew"] not in named:
             raise ValueError(f"Claude chose crew {event['crew']} but the message names {named}")
@@ -367,7 +428,7 @@ def llm_parse_event(text: str, only_crew: int | None = None) -> dict:
 
 
 def parse_event(text: str, only_crew: int | None = None) -> dict:
-    """{"event": "crew_out"|"crew_partial"|"unclear", "crew", "capacity", "question"[, "candidates"]}.
+    """{"event": "crew_out"|"crew_partial"|"new_job"|"unclear", "crew", "capacity", "question"[, "candidates"|"job"]}.
 
     only_crew: the supervisor already picked which crew to replan (after "which one first?").
     """
@@ -391,6 +452,9 @@ def _sick_crew(plan: dict, changes: dict | None, event: dict | None) -> int | No
         return changes["moved"][0]["from"]
     empty = [c["crew"] for c in plan["crews"] if not c["jobs"]]
     return empty[0] if len(empty) == 1 else None
+
+
+_SEV = {0: "low", 1: "routine", 2: "high", 3: "emergency"}
 
 
 def _plural(n: int, word: str) -> str:
@@ -429,11 +493,18 @@ def template_briefing(plan: dict, metrics: dict, when: str = "8am", changes: dic
     who = f"Crew {crew}" if crew else "One crew"
     partial = event and event.get("event") == "crew_partial"
 
-    lines = [f"Noon update: {who} is {'short-handed' if partial else 'out'}, "
-             f"so the plan now covers {_plural(n, 'job')} with {safety} safety tickets."]
-    lines.append(f"{_plural(moved, 'job')} {'was' if moved == 1 else 'were'} moved to nearby crews "
-                 f"and {_plural(dropped, 'lower-priority job')} {'was' if dropped == 1 else 'were'} "
-                 f"deferred (not done today).")
+    if event and event.get("event") == "new_job":
+        job = event["job"]
+        lines = [f"Update: a new {_SEV.get(job.get('severity'), 'high')}-priority {str(job['label']).lower()} was "
+                 f"reported in {str(job.get('community') or 'the city').title()}. {event.get('effect_text', '')}".strip()]
+        lines.append(f"The plan now covers {_plural(n, 'job')} with {safety} safety tickets; "
+                     f"{moved} moved and {dropped} deferred so far today.")
+    else:
+        lines = [f"Update: {who} is {'short-handed' if partial else 'out'}, "
+                 f"so the plan now covers {_plural(n, 'job')} with {safety} safety tickets."]
+        lines.append(f"{_plural(moved, 'job')} {'was' if moved == 1 else 'were'} moved to nearby crews "
+                     f"and {_plural(dropped, 'lower-priority job')} {'was' if dropped == 1 else 'were'} "
+                     f"deferred (not done today).")
     if safety_dropped == 0:
         lines.append("No safety tickets were dropped.")
     elif safety_dropped:
@@ -470,7 +541,11 @@ def _briefing_facts(plan: dict, metrics: dict, when: str, changes: dict | None, 
     if safety_dropped is None and "dropped_jobs" in changes:
         safety_dropped = sum(bool(j["safety"]) for j in changes["dropped_jobs"])
     crew = _sick_crew(plan, changes, event)
-    if event and event.get("event") == "crew_partial":
+    if event and event.get("event") == "new_job":
+        job = event["job"]
+        what = (f"a new {_SEV.get(job.get('severity'), 'high')}-priority job was reported: {job['label']} in "
+                f"{str(job.get('community') or 'the city').title()}")
+    elif event and event.get("event") == "crew_partial":
         what = f"crew {crew} is short-handed ({event.get('capacity', 0):.0%} capacity)"
     else:
         what = f"crew {crew} is out for the day" if crew else "one crew is out for the day"
@@ -480,7 +555,12 @@ def _briefing_facts(plan: dict, metrics: dict, when: str, changes: dict | None, 
         "jobs_deferred_not_done_today": m.get("dropped", len(changes.get("dropped", []))),
         "safety_tickets_deferred": "unknown" if safety_dropped is None else safety_dropped,
         "deferred_job_types": [j["type"] for j in changes.get("dropped_jobs", [])],
+        "new_jobs_added_today": m.get("added", len(changes.get("added", []))),
     })
+    if event and event.get("effect_text"):
+        facts["what_the_latest_update_did"] = event["effect_text"]
+    if event and event.get("updates"):
+        facts["all_updates_today_in_order"] = event["updates"]
     return facts
 
 
@@ -488,8 +568,8 @@ _BRIEFING_SYSTEM = (
     "You write short spoken briefings for a City of Calgary Roads supervisor. Write 3-4 short, plain "
     "sentences, under 80 words in total: no markdown, no bullet points, no headers. Lead with what "
     "matters most and skip anything the supervisor doesn't need. Use only numbers that appear in the data "
-    "you are given; never invent or estimate a number. Safety tickets are potholes and missing or "
-    "damaged signs."
+    "you are given; never invent or estimate a number. Safety tickets are potholes, missing or "
+    "damaged signs, and urgent jobs reported during the day."
 )
 
 
@@ -503,7 +583,8 @@ def llm_briefing(plan: dict, metrics: dict, when: str = "8am", changes: dict | N
                     "safety tickets the plan covers versus working oldest-first.")
         else:
             task = ("This is the noon replan briefing. Say what happened, how many jobs moved to other crews, "
-                    "how many were deferred, and say explicitly whether any safety tickets were dropped.")
+                    "how many were deferred, and say explicitly whether any safety tickets were dropped. If "
+                    "several updates came in during the day, focus on the latest one and the cumulative totals.")
         user = f"{task}\n\nData:\n{json.dumps(facts, indent=1)}"
         text = _ask_claude(_BRIEFING_SYSTEM, user, max_tokens=400)
         last_source["briefing"] = "claude"

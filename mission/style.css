@@ -95,6 +95,9 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); c
   border: 1px solid transparent; border-radius: 9px; padding: 8px 11px; cursor: pointer; white-space: nowrap; transition: background .15s; }
 #controls button:hover { background: rgba(255, 255, 255, .13); }
 #controls button.on { background: rgba(34, 211, 238, .18); border-color: rgba(34, 211, 238, .55); color: #bff4ff; }
+#btn-street { font: 600 12px Inter, sans-serif; color: var(--text); background: rgba(255, 255, 255, .06); border-radius: 9px;
+  padding: 8px 11px; text-decoration: none; white-space: nowrap; }
+#btn-street:hover { background: rgba(255, 255, 255, .13); }
 button.primary { background: linear-gradient(135deg, #0ea5e9, #8b5cf6) !important; color: #fff !important; }
 #scene-btns, #speeds { display: flex; gap: 4px; }
 #speeds button { padding: 8px 8px; font-family: var(--mono); }

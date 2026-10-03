@@ -1,5 +1,9 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
 // ────────────────────────────────────────────────────────────
 // CONFIG
@@ -30,7 +34,7 @@ let closedRoads = new Set();
 let simStats = { n: 0, meanSpeed: 0, halting: 0 };
 let controlState = { playbackRate: 1, speedScale: 1, demandScale: 1, signalMode: 'normal', closeEdges: [] };
 let simTime = 0;
-let isNight = false;
+let isNight = true;            // Mission Control look by default; toggle = blue hour
 let isPaused = false;
 let isMockMode = USE_MOCK;
 let streamConnected = false;
@@ -41,7 +45,13 @@ let streamInterp = 0;
 // Three.js objects
 let scene, camera, renderer, clock;
 let flyControls, orbitControls;
-let cameraMode = 'fly'; // 'fly' | 'orbit' | 'cinematic'
+let cameraMode = 'intro'; // 'intro' | 'fly' | 'orbit' | 'cinematic'
+let composer, bloomPass, gridHelper;
+let introT = 0;
+const introFrom = new THREE.Vector3(), introTo = new THREE.Vector3();
+let orbitIdleAt = 0;            // resume auto-rotate after the user stops dragging
+const winUniform = { value: 1 }; // lit-window intensity (night 1, blue hour lower)
+const speedHistory = [];
 let cinOrbitAngle = 0;
 let groundMesh, roadGroup, buildingGroup, parkGroup, waterGroup, signalGroup;
 let labelGroup;
@@ -57,10 +67,10 @@ let mouse = new THREE.Vector2();
 const carDummy = new THREE.Object3D();
 
 // Speed colors
-const COLOR_STOPPED = new THREE.Color('#e74c3c');  // red
-const COLOR_SLOW = new THREE.Color('#f1c40f');     // yellow
-const COLOR_FLOW = new THREE.Color('#2ecc71');     // green
-const COLOR_PLAIN = new THREE.Color('#3498db');    // blue for plain mode
+const COLOR_STOPPED = new THREE.Color('#ff3b4e');  // red
+const COLOR_SLOW = new THREE.Color('#facc15');     // yellow
+const COLOR_FLOW = new THREE.Color('#3ee08f');     // green
+const COLOR_PLAIN = new THREE.Color('#22d3ee');    // cyan for plain mode
 
 // Road edge ID -> road object mapping for raycasting
 let roadMeshMap = new Map();
@@ -80,7 +90,8 @@ function initMockVehicles() {
   let id = 0;
   for (let ri = 0; ri < roadShapes.length; ri++) {
     const shape = roadShapes[ri];
-    const numCars = 3 + Math.floor(Math.random() * 6);
+    const perRoad = Math.max(1, Math.min(8, Math.round(700 / roadShapes.length)));  // ~700 cars on any network
+    const numCars = Math.max(1, Math.round(perRoad * (0.5 + Math.random())));
     for (let c = 0; c < numCars; c++) {
       const seg = Math.floor(Math.random() * (shape.length - 1));
       const t = Math.random();
@@ -103,10 +114,10 @@ function updateMockStream(dt) {
   mockTime += dt * (isPaused ? 0 : controlState.playbackRate);
   for (const v of mockVehicles) {
     const shape = sceneData.roads[v.roadIdx].shape;
-    v.t += v.speed * dt * controlState.speedScale / Math.hypot(
+    v.t += v.speed * dt * controlState.speedScale / (Math.hypot(
       shape[v.seg+1][0] - shape[v.seg][0],
       shape[v.seg+1][1] - shape[v.seg][1]
-    );
+    ) || 1);  // zero-length segments in real networks
     if (v.t > 1) {
       v.t -= 1;
       v.seg++;
@@ -143,7 +154,8 @@ function updateMockStream(dt) {
 function getMockStreamData() {
   return {
     t: mockTime,
-    v: mockVehicles.map(v => [v.id, v.x, v.y, v.angle, v.speed]),
+    // mock cars live on the recentred roads; add CEN back because processStreamData subtracts it
+    v: mockVehicles.map(v => [v.id, v.x + CEN.x, v.y + CEN.y, v.angle, v.speed]),
     tls: tlsStates,
     stats: {
       n: mockVehicles.length,
@@ -158,10 +170,7 @@ function getMockStreamData() {
 // FETCH / SSE
 // ────────────────────────────────────────────────────────────
 async function loadSceneData() {
-  if (isMockMode) {
-    const resp = await fetch('mock/scene.json');
-    return resp.json();
-  }
+  if (isMockMode) return loadOfflineScene();
   try {
     const resp = await fetch(BACKEND + '/scene.json');
     if (!resp.ok) throw new Error('Backend not available');
@@ -170,9 +179,18 @@ async function loadSceneData() {
     console.warn('Backend unavailable, switching to mock');
     isMockMode = true;
     setBadge('mock');
-    const resp = await fetch('mock/scene.json');
-    return resp.json();
+    return loadOfflineScene();
   }
+}
+
+// Offline: the real downtown network exported beside the page (scene.json), else the toy grid
+async function loadOfflineScene() {
+  try {
+    const resp = await fetch('scene.json');
+    if (resp.ok) return await resp.json();
+  } catch (e) { /* fall through */ }
+  const resp = await fetch('mock/scene.json');
+  return resp.json();
 }
 
 function connectStream() {
@@ -257,19 +275,20 @@ function setBadge(type) {
 // ────────────────────────────────────────────────────────────
 function initThree() {
   // Renderer
-  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false,
+    preserveDrawingBuffer: new URLSearchParams(location.search).has('shot') });  // ?shot: headless screenshots
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.0;
+  renderer.toneMappingExposure = 1.05;
   container.appendChild(renderer.domElement);
 
-  // Scene
+  // Scene: night sky gradient + navy haze (the Mission Control look)
   scene = new THREE.Scene();
-  scene.fog = new THREE.Fog(0xc8dce8, 600, 2500);
-  scene.background = new THREE.Color(0xc8dce8);
+  scene.fog = new THREE.Fog(0x0b1426, 600, 2500);
+  scene.background = skyTexture(true);
 
   // Camera
   camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 5, 5000);
@@ -277,11 +296,11 @@ function initThree() {
   camera.lookAt(0, 0, 0);
 
   window.__dbg = { scene, camera, get bg(){return buildingGroup;}, get roadMeshMap(){return roadMeshMap;}, get roadGroup(){return roadGroup;}, get CEN(){return CEN;}, get sceneData(){return sceneData;}, get originalRoadMaterial(){ return window.__roadMat || null; } };
-  // Lighting
-  const ambient = new THREE.AmbientLight(0x8899bb, 1.2);
+  // Lighting: cool moonlight; the city's own glow (windows, cars, signals) does the rest
+  const ambient = new THREE.AmbientLight(0x3a4a6e, 0.9);
   scene.add(ambient);
 
-  const sun = new THREE.DirectionalLight(0xffeedd, 3.5);
+  const sun = new THREE.DirectionalLight(0x9fb8ff, 1.4);
   sun.position.set(300, 500, 200);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
@@ -296,13 +315,13 @@ function initThree() {
   scene.userData.sun = sun;
   scene.userData.ambient = ambient;
 
-  const hemi = new THREE.HemisphereLight(0x8899cc, 0x445566, 0.8);
+  const hemi = new THREE.HemisphereLight(0x2a4170, 0x05070d, 0.6);
   scene.add(hemi);
   scene.userData.hemi = hemi;
 
   // Ground
   const groundGeo = new THREE.PlaneGeometry(3000, 3000);
-  const groundMat = new THREE.MeshStandardMaterial({ color: 0xd2d8c8, roughness: 0.95 });
+  const groundMat = new THREE.MeshStandardMaterial({ color: 0x070b13, roughness: 1 });
   groundMesh = new THREE.Mesh(groundGeo, groundMat);
   groundMesh.rotation.x = -Math.PI / 2;
   groundMesh.position.y = -0.2;
@@ -333,12 +352,26 @@ function initThree() {
   orbitControls.dampingFactor = 0.1;
   orbitControls.minDistance = 20;
   orbitControls.maxDistance = 1500;
-  orbitControls.maxPolarAngle = Math.PI / 2 + 0.3;
+  orbitControls.maxPolarAngle = Math.PI / 2 - 0.05;
   orbitControls.enabled = false;
+  orbitControls.autoRotateSpeed = 0.35;
+  orbitControls.addEventListener('start', () => { orbitControls.autoRotate = false; orbitIdleAt = performance.now() + 12000; });
+
+  // Bloom: anything bright (windows, cars, signals) glows
+  composer = new EffectComposer(renderer);
+  composer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+  composer.addPass(new RenderPass(scene, camera));
+  bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.85, 0.55, 0.72);
+  composer.addPass(bloomPass);
+  composer.addPass(new OutputPass());
 
   // Car InstancedMesh
   const carGeo = createCarGeometry();
-  const carMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4, metalness: 0.1 });
+  const carMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.35, metalness: 0.2 });
+  carMat.onBeforeCompile = (sh) => {
+    sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>',
+      '#include <emissivemap_fragment>\n#ifdef USE_COLOR\n  totalEmissiveRadiance += vColor.rgb * 1.15;\n#endif');
+  };
   carInstancedMesh = new THREE.InstancedMesh(carGeo, carMat, MAX_CARS);
   carInstancedMesh.frustumCulled = false;
   carInstancedMesh.castShadow = true;
@@ -502,12 +535,13 @@ function buildScene() {
   roadMeshMap.clear();
 
   // Roads
-  const roadMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8, side: THREE.DoubleSide });
+  const roadMat = new THREE.MeshStandardMaterial({ color: 0x1a2436, roughness: 0.85, side: THREE.DoubleSide });
   // Publish the pristine white material so the congestion layer can restore
   // it exactly (reading it back off a mesh would return an already-recoloured
   // clone). Declared here because __dbg is built earlier in init().
   window.__roadMat = roadMat;
-  const roadOutlineMat = new THREE.MeshStandardMaterial({ color: 0x9aa0a6, roughness: 0.8, side: THREE.DoubleSide });
+  const roadOutlineMat = new THREE.MeshStandardMaterial({ color: 0x2a5d9a, emissive: 0x1d4f8f, emissiveIntensity: 0.9,
+    roughness: 0.8, side: THREE.DoubleSide });
 
   for (const road of sceneData.roads) {
     const pts = road.shape.map(([x, y]) => new THREE.Vector3(x, 0, -y));
@@ -522,7 +556,7 @@ function buildScene() {
     roadGroup.add(outline);
 
     if (road.lanes >= 2) {
-      const dashMat = new THREE.MeshBasicMaterial({ color: 0xf4d35e });
+      const dashMat = new THREE.MeshBasicMaterial({ color: 0x1b7f99 });
       roadGroup.add(new THREE.Mesh(ribbonGeo(pts, 0.18, 0.2), dashMat));
     }
   }
@@ -531,7 +565,7 @@ function buildScene() {
   mergeBuildings();
 
   // Parks
-  const parkMat = new THREE.MeshStandardMaterial({ color: 0x6aaa50, roughness: 0.9 });
+  const parkMat = new THREE.MeshStandardMaterial({ color: 0x0e2a20, roughness: 0.95 });
   for (const ring of sceneData.parks) {
     const shape = new THREE.Shape();
     shape.moveTo(ring[0][0], ring[0][1]);
@@ -548,7 +582,7 @@ function buildScene() {
   }
 
   // Water
-  const waterMat = new THREE.MeshStandardMaterial({ color: 0x3388cc, roughness: 0.2, metalness: 0.4 });
+  const waterMat = new THREE.MeshStandardMaterial({ color: 0x0a2240, emissive: 0x061a33, roughness: 0.15, metalness: 0.6 });
   if (sceneData.water && sceneData.water.length > 0) {
     for (const ring of sceneData.water) {
       const shape = new THREE.Shape();
@@ -575,7 +609,7 @@ function buildScene() {
 
 function mergeBuildings() {
   const geosToMerge = [];
-  const bldgMat = new THREE.MeshStandardMaterial({ color: 0xd5cfc0, roughness: 0.5, metalness: 0.1 });
+  const bldgMat = towerMaterial();
 
   for (const b of sceneData.buildings) {
     const shape = new THREE.Shape();
@@ -591,17 +625,78 @@ function mergeBuildings() {
 
   if (geosToMerge.length > 0) {
     const merged = mergeGeometries(geosToMerge);
+    const n = merged.getAttribute('normal');
+    const wall = new Float32Array(n.count);
+    for (let i = 0; i < n.count; i++) wall[i] = Math.abs(n.getY(i)) < 0.5 ? 1 : 0;
+    merged.setAttribute('aWall', new THREE.BufferAttribute(wall, 1));
     const mesh = new THREE.Mesh(merged, bldgMat);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     buildingGroup.add(mesh);
+    // glowing wireframe edges: the "digital twin" outline that keeps towers readable at night
+    const edges = new THREE.LineSegments(new THREE.EdgesGeometry(merged, 30),
+      new THREE.LineBasicMaterial({ color: 0x4f8fe0, transparent: true, opacity: 0.42 }));
+    buildingGroup.add(edges);
+    buildingGroup.userData.edges = edges;
     buildingGroup.userData.mesh = mesh;
   }
 }
 
+// Navy towers that lighten with height, with a procedural grid of lit windows on the walls
+// (warm offices, a few cool screens). Window brightness follows winUniform (night/blue hour).
+function towerMaterial() {
+  const mat = new THREE.MeshStandardMaterial({ color: 0x2b3d62, roughness: 0.6, metalness: 0.2 });
+  mat.onBeforeCompile = (sh) => {
+    sh.uniforms.uWin = winUniform;
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute float aWall;\nvarying float vWall;\nvarying vec3 vWPos;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWall = aWall;\nvWPos = (modelMatrix * vec4(position, 1.0)).xyz;');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', `#include <common>
+uniform float uWin;
+varying float vWall;
+varying vec3 vWPos;
+float hash21(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }`)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+diffuseColor.rgb *= mix(0.7, 1.7, clamp(vWPos.y / 140.0, 0.0, 1.0));
+diffuseColor.rgb *= mix(0.6, 1.0, vWall);`)
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+{
+  vec2 g = vec2((vWPos.x + vWPos.z) / 3.2, vWPos.y / 3.6);
+  vec2 f = fract(g);
+  float win = step(0.22, f.x) * step(f.x, 0.78) * step(0.3, f.y) * step(f.y, 0.78);
+  win *= clamp(1.4 - max(fwidth(g.x), fwidth(g.y)) * 3.0, 0.0, 1.0);  // fade sub-pixel windows (no speckle)
+  float r = hash21(floor(g) + floor(vWPos.xz / 37.0));
+  float lit = step(0.58, r);
+  vec3 wc = mix(vec3(1.0, 0.74, 0.42), vec3(0.5, 0.82, 1.0), step(0.9, r));
+  totalEmissiveRadiance += vWall * win * lit * step(3.0, vWPos.y) * wc * uWin * (0.45 + 0.55 * fract(r * 7.0));
+}`);
+  };
+  return mat;
+}
+
+// Vertical sky gradient with a faint horizon glow, as a screen-space background
+function skyTexture(night) {
+  const c = document.createElement('canvas');
+  c.width = 16; c.height = 512;
+  const g = c.getContext('2d');
+  const grad = g.createLinearGradient(0, 0, 0, 512);
+  if (night) {
+    grad.addColorStop(0, '#02040a'); grad.addColorStop(0.55, '#07101f');
+    grad.addColorStop(0.8, '#0f1d36'); grad.addColorStop(1, '#16284a');
+  } else {
+    grad.addColorStop(0, '#0b1a36'); grad.addColorStop(0.5, '#1f3c6e');
+    grad.addColorStop(0.8, '#4a6fa5'); grad.addColorStop(1, '#e8a87c');
+  }
+  g.fillStyle = grad; g.fillRect(0, 0, 16, 512);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
 function addParkTrees(ring) {
-  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.8 });
-  const leafMat = new THREE.MeshStandardMaterial({ color: 0x3d7a28, roughness: 0.7 });
+  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x1a1410, roughness: 0.8 });
+  const leafMat = new THREE.MeshStandardMaterial({ color: 0x14503a, emissive: 0x06261b, roughness: 0.7 });
 
   // Calculate centroid
   let cx = 0, cy = 0;
@@ -629,8 +724,8 @@ function addParkTrees(ring) {
 }
 
 function buildSignals() {
-  const postMat = new THREE.MeshStandardMaterial({ color: 0x444444, roughness: 0.6 });
-  const headMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.5 });
+  const postMat = new THREE.MeshStandardMaterial({ color: 0x1b2230, roughness: 0.6 });
+  const headMat = new THREE.MeshStandardMaterial({ color: 0x0b0f17, roughness: 0.5 });
 
   for (const s of sceneData.signals) {
     const group = new THREE.Group();
@@ -648,17 +743,17 @@ function buildSignals() {
 
     // 3 lights
     const lightGeo = new THREE.SphereGeometry(0.18, 8, 8);
-    const redLight = new THREE.Mesh(lightGeo, new THREE.MeshStandardMaterial({ color: 0x330000, emissive: 0x330000 }));
+    const redLight = new THREE.Mesh(lightGeo, new THREE.MeshStandardMaterial({ color: 0x330000, emissive: 0x330000, emissiveIntensity: 3 }));
     redLight.position.set(0, 4.9, 0.2);
     redLight.userData.color = 'red';
     group.add(redLight);
 
-    const yellowLight = new THREE.Mesh(lightGeo, new THREE.MeshStandardMaterial({ color: 0x332200, emissive: 0x332200 }));
+    const yellowLight = new THREE.Mesh(lightGeo, new THREE.MeshStandardMaterial({ color: 0x332200, emissive: 0x332200, emissiveIntensity: 3 }));
     yellowLight.position.set(0, 4.5, 0.2);
     yellowLight.userData.color = 'yellow';
     group.add(yellowLight);
 
-    const greenLight = new THREE.Mesh(lightGeo, new THREE.MeshStandardMaterial({ color: 0x003300, emissive: 0x003300 }));
+    const greenLight = new THREE.Mesh(lightGeo, new THREE.MeshStandardMaterial({ color: 0x003300, emissive: 0x003300, emissiveIntensity: 3 }));
     greenLight.position.set(0, 4.1, 0.2);
     greenLight.userData.color = 'green';
     group.add(greenLight);
@@ -716,13 +811,13 @@ function buildStreetLabels() {
     ctx.textBaseline = 'middle';
 
     // White halo (stroke)
-    ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+    ctx.strokeStyle = 'rgba(5,8,16,0.9)';
     ctx.lineWidth = fontSize * 0.25;
     ctx.lineJoin = 'round';
     ctx.strokeText(name, canvas.width / 2, canvas.height / 2);
 
     // Grey text fill
-    ctx.fillStyle = '#666666';
+    ctx.fillStyle = '#cfe3ff';
     ctx.fillText(name, canvas.width / 2, canvas.height / 2);
 
     const texture = new THREE.CanvasTexture(canvas);
@@ -856,7 +951,7 @@ function updateCars(dt) {
     // In three.js, heading 0 faces -z. A car heading east (90° clockwise from north) should face +x.
     // rotation.y = -angle * PI/180
     carDummy.rotation.set(0, -v.angle * Math.PI / 180, 0);
-    carDummy.scale.setScalar(Math.min(5, Math.max(1, camera.position.y / 120)));
+    carDummy.scale.setScalar(Math.min(3.2, Math.max(1, camera.position.y / 160)));
     carDummy.updateMatrix();
     carInstancedMesh.setMatrixAt(count, carDummy.matrix);
 
@@ -884,7 +979,8 @@ function updateCars(dt) {
 // RAYCASTING FOR ROADS
 // ────────────────────────────────────────────────────────────
 function onCanvasClick(e) {
-  // Only raycast if pointer is not locked (fly mode needs click to lock)
+  // Only fly mode captures the mouse; orbit and cinematic use normal dragging
+  if (cameraMode !== 'fly') return;
   if (!document.pointerLockElement) {
     // Check if clicking on control panel
     if (e.target.closest('#control-panel')) return;
@@ -908,20 +1004,17 @@ function onKeyDown(e) {
   if (e.code === 'Escape') {
     if (document.pointerLockElement) document.exitPointerLock();
   }
-  if (e.code === 'KeyC') {
-    toggleCameraMode('orbit');
-  }
-  if (e.code === 'KeyO') {
-    toggleCameraMode('cinematic');
-  }
-  if (e.code === 'Tab' || e.code === 'KeyP') {
+  if (e.target.closest && e.target.closest('input, select, textarea')) return;
+  if (e.code === 'KeyC') setCameraMode('orbit');
+  if (e.code === 'KeyF') setCameraMode('fly');
+  if (e.code === 'KeyO') setCameraMode('cinematic');
+  if (e.code === 'KeyH') document.body.classList.toggle('ui-hidden');
+  if (e.code === 'KeyN') toggleDayNight();
+  if (e.code === 'Tab') {
     e.preventDefault();
     if (document.pointerLockElement) document.exitPointerLock();
-    // Toggle panel focus
-    panel.style.pointerEvents = panel.style.pointerEvents === 'none' ? 'auto' : 'none';
-    if (panel.style.pointerEvents === 'none') {
-      renderer.domElement.requestPointerLock();
-    }
+    panel.classList.toggle('panel-collapsed');
+    panelToggle.textContent = panel.classList.contains('panel-collapsed') ? '+' : '−';
   }
 }
 
@@ -929,27 +1022,21 @@ function onKeyUp(e) {
   keys[e.code] = false;
 }
 
-function toggleCameraMode(mode) {
-  if (cameraMode === mode) {
-    // Switch back to fly
-    cameraMode = 'fly';
-    orbitControls.enabled = false;
+function setCameraMode(mode) {
+  if (document.pointerLockElement && mode !== 'fly') document.exitPointerLock();
+  cameraMode = mode;
+  orbitControls.enabled = mode !== 'fly';
+  orbitControls.autoRotate = mode === 'orbit';
+  document.body.style.cursor = mode === 'orbit' ? 'grab' : '';
+  if (mode === 'orbit') orbitControls.target.set(0, 0, 0);
+  if (mode === 'cinematic') cinOrbitAngle = Math.atan2(camera.position.z, camera.position.x);
+  if (mode === 'fly') {
+    initFlyControls();  // keep the current view instead of snapping
     if (!document.pointerLockElement) renderer.domElement.requestPointerLock();
-    document.body.style.cursor = '';
-  } else {
-    if (document.pointerLockElement) document.exitPointerLock();
-    cameraMode = mode;
-    if (mode === 'orbit') {
-      orbitControls.enabled = true;
-      orbitControls.target.set(0, 0, 0);
-      document.body.style.cursor = 'grab';
-    } else if (mode === 'cinematic') {
-      orbitControls.enabled = true;
-      document.body.style.cursor = '';
-      cinOrbitAngle = 0;
-    }
   }
+  document.querySelectorAll('[data-cam]').forEach(b => b.classList.toggle('on', b.dataset.cam === mode));
 }
+window.setCameraMode = setCameraMode;
 
 function updateCinematicOrbit(dt) {
   if (cameraMode !== 'cinematic') return;
@@ -1029,33 +1116,23 @@ function highlightClosedRoads() {
 // ────────────────────────────────────────────────────────────
 function toggleDayNight() {
   isNight = !isNight;
-  if (isNight) {
-    scene.fog = new THREE.Fog(0x0a0a1e, 400, 1500);
-    scene.background = new THREE.Color(0x0a0a1e);
-    scene.userData.sun.intensity = 0.3;
-    scene.userData.sun.color.set(0x8899cc);
-    scene.userData.ambient.intensity = 0.3;
-    scene.userData.ambient.color.set(0x334466);
-    if (buildingGroup.userData.mesh) {
-      buildingGroup.userData.mesh.material.emissive = new THREE.Color(0x221100);
-      buildingGroup.userData.mesh.material.emissiveIntensity = 0.3;
-    }
-    document.body.classList.add('night-mode');
-    document.getElementById('btn-daynight').textContent = '☀ Day Mode';
-  } else {
-    scene.fog = new THREE.Fog(0xc8dce8, 600, 2500);
-    scene.background = new THREE.Color(0xc8dce8);
-    scene.userData.sun.intensity = 3.5;
-    scene.userData.sun.color.set(0xffeedd);
-    scene.userData.ambient.intensity = 1.2;
-    scene.userData.ambient.color.set(0x8899bb);
-    if (buildingGroup.userData.mesh) {
-      buildingGroup.userData.mesh.material.emissive = new THREE.Color(0x000000);
-      buildingGroup.userData.mesh.material.emissiveIntensity = 0;
-    }
-    document.body.classList.remove('night-mode');
-    document.getElementById('btn-daynight').textContent = '🌙 Night Mode';
-  }
+  applyTheme();
+}
+
+function applyTheme() {
+  const u = scene.userData;
+  scene.background = skyTexture(isNight);
+  scene.fog.color.set(isNight ? 0x0b1426 : 0x3a5a8a);
+  u.sun.color.set(isNight ? 0x9fb8ff : 0xffc9a0);
+  u.sun.intensity = isNight ? 1.4 : 2.4;
+  u.ambient.color.set(isNight ? 0x3a4a6e : 0x6f86b8);
+  u.ambient.intensity = isNight ? 0.9 : 1.3;
+  u.hemi.intensity = isNight ? 0.6 : 1.0;
+  winUniform.value = isNight ? 1 : 0.35;
+  bloomPass.strength = isNight ? 0.85 : 0.45;
+  renderer.toneMappingExposure = isNight ? 1.05 : 1.15;
+  document.body.classList.toggle('night-mode', isNight);
+  document.getElementById('btn-daynight').textContent = isNight ? '☀ Blue hour' : '🌙 Night';
 }
 
 // ────────────────────────────────────────────────────────────
@@ -1139,8 +1216,39 @@ function updateStatsHUD() {
   document.getElementById('stat-cars').textContent = simStats.n || vehicles.size || 0;
   document.getElementById('stat-speed').textContent = ((simStats.meanSpeed || 0) * 3.6).toFixed(0);
   document.getElementById('stat-stopped').textContent = simStats.halting || 0;
-  document.getElementById('stat-time').textContent = simTime.toFixed(1);
+  const t = Math.max(0, simTime || 0);
+  document.getElementById('stat-time').textContent =
+    [t / 3600, t % 3600 / 60, t % 60].map(v => String(Math.floor(v)).padStart(2, '0')).join(':');
   document.getElementById('stat-mode').textContent = controlState.signalMode || 'normal';
+  const n = simStats.n || vehicles.size || 0;
+  const moving = n ? Math.round(100 * (1 - (simStats.halting || 0) / n)) : 0;
+  const mv = document.getElementById('stat-moving');
+  if (mv) mv.textContent = moving;
+  drawSparkline((simStats.meanSpeed || 0) * 3.6);
+}
+
+let sparkAt = 0;
+function drawSparkline(kmh) {
+  const now = performance.now();
+  if (now - sparkAt < 500) return;  // two samples a second, ~1 minute of history
+  sparkAt = now;
+  speedHistory.push(kmh);
+  if (speedHistory.length > 120) speedHistory.shift();
+  const cv = document.getElementById('spark-speed');
+  if (!cv) return;
+  const g = cv.getContext('2d'), w = cv.width, h = cv.height;
+  const max = Math.max(30, ...speedHistory);
+  g.clearRect(0, 0, w, h);
+  const grad = g.createLinearGradient(0, 0, 0, h);
+  grad.addColorStop(0, 'rgba(34,211,238,0.35)'); grad.addColorStop(1, 'rgba(34,211,238,0)');
+  g.beginPath();
+  speedHistory.forEach((v, i) => {
+    const x = i / 119 * w, y = h - 2 - v / max * (h - 4);
+    i ? g.lineTo(x, y) : g.moveTo(x, y);
+  });
+  g.strokeStyle = '#22d3ee'; g.lineWidth = 1.5; g.stroke();
+  g.lineTo((speedHistory.length - 1) / 119 * w, h); g.lineTo(0, h); g.closePath();
+  g.fillStyle = grad; g.fill();
 }
 
 let fpsFrames = 0;
@@ -1162,6 +1270,7 @@ function onResize() {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+  composer.setSize(window.innerWidth, window.innerHeight);
 }
 
 // ────────────────────────────────────────────────────────────
@@ -1185,8 +1294,12 @@ function animate(timestamp) {
   }
 
   // Controls
+  if (cameraMode === 'intro') updateIntro(dt);
   if (cameraMode === 'fly') updateFlyControls(dt);
-  if (cameraMode === 'orbit') orbitControls.update();
+  if (cameraMode === 'orbit') {
+    if (!orbitControls.autoRotate && orbitIdleAt && performance.now() > orbitIdleAt) orbitControls.autoRotate = true;
+    orbitControls.update();
+  }
   if (cameraMode === 'cinematic') updateCinematicOrbit(dt);
 
   // Update scene
@@ -1196,8 +1309,17 @@ function animate(timestamp) {
   updateStatsHUD();
   updateFPS(dt);
 
-  // Render
-  renderer.render(scene, camera);
+  // Render (bloom)
+  composer.render();
+}
+
+// Opening shot: swoop down from high above the city into a slow orbit
+function updateIntro(dt) {
+  introT = Math.min(1, introT + dt / 5);
+  const e = introT < 0.5 ? 4 * introT ** 3 : 1 - (-2 * introT + 2) ** 3 / 2;
+  camera.position.lerpVectors(introFrom, introTo, e);
+  camera.lookAt(0, 0, 0);
+  if (introT >= 1) setCameraMode('orbit');
 }
 
 // ────────────────────────────────────────────────────────────
@@ -1217,6 +1339,14 @@ function recenterScene(d) {
   d.__centered = true;
   camera.position.set(0, sceneSpan * 0.35, sceneSpan * 0.55);
   camera.lookAt(0, 0, 0);
+  introFrom.set(-sceneSpan * 0.15, sceneSpan * 1.25, sceneSpan * 1.1);
+  introTo.set(sceneSpan * 0.32, sceneSpan * 0.2, sceneSpan * 0.36);
+  camera.position.copy(introFrom); camera.lookAt(0, 0, 0);
+  // faint "digital twin" grid on the ground
+  const size = sceneSpan * 3;
+  gridHelper = new THREE.GridHelper(size, Math.round(size / 50), 0x1d4f8f, 0x13294a);
+  gridHelper.material.transparent = true; gridHelper.material.opacity = 0.35; gridHelper.position.y = -0.1;
+  scene.add(gridHelper);
   camera.far = sceneSpan * 4; camera.updateProjectionMatrix();
   scene.fog.near = sceneSpan * 0.6; scene.fog.far = sceneSpan * 3;
   groundMesh.scale.set(sceneSpan * 3 / 3000, sceneSpan * 3 / 3000, 1);
@@ -1228,6 +1358,9 @@ async function main() {
   initThree();
   installRoadClick();
   setupControlPanel();
+  applyTheme();
+  document.querySelectorAll('[data-cam]').forEach(b => b.addEventListener('click', () => setCameraMode(b.dataset.cam)));
+  document.getElementById('btn-hide-ui')?.addEventListener('click', () => document.body.classList.toggle('ui-hidden'));
 
   // Initial badge
   setBadge(isMockMode ? 'mock' : 'connecting');
@@ -1236,6 +1369,8 @@ async function main() {
   sceneData = await loadSceneData();
   recenterScene(sceneData);
   buildScene();
+  const sub = document.getElementById('scene-sub');
+  if (sub) sub.textContent = `${sceneData.signals.length} signals · ${sceneData.roads.length} road segments · ${sceneData.buildings.length} buildings`;
 
   // Connect stream
   if (!isMockMode) {

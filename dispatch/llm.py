@@ -4,9 +4,12 @@ Every LLM call has a non-LLM fallback so the demo works offline.
 """
 import json
 import logging
+import os
 import re
+from pathlib import Path
 
 MODEL = "claude-sonnet-5-5"
+ENV_FILE = Path(__file__).resolve().parent.parent / ".env"  # copy .env.example to .env, add your key
 CREWS = 8
 USE_LLM = True  # set False to force the regex / template fallbacks
 
@@ -40,10 +43,31 @@ def regex_parse_event(text: str) -> dict:
                   question=f"What's happening with crew {crew}: out for the day, or short-handed?")
 
 
+def load_env(path: Path = ENV_FILE) -> None:
+    """Copy KEY=value lines from the repo's .env into os.environ. Variables already set win."""
+    if not path.exists():
+        return
+    for line in path.read_text(encoding="utf-8-sig").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        value = value.strip().strip("\"'")
+        if value:  # a blank placeholder like ANTHROPIC_API_KEY= is ignored
+            os.environ.setdefault(key.strip(), value)
+
+
+def has_api_key() -> bool:
+    load_env()
+    return bool(os.environ.get("ANTHROPIC_API_KEY"))
+
+
 def _ask_claude(system: str, user: str, max_tokens: int, output_format: dict | None = None) -> str:
     """One Claude call; returns the reply text or raises on any problem (caller falls back)."""
     global _client
     if _client is None:
+        if not has_api_key():
+            raise RuntimeError(f"no ANTHROPIC_API_KEY (add it to {ENV_FILE.name})")
         import anthropic  # imported here so a missing package just means "use the fallback"
         _client = anthropic.Anthropic(timeout=20.0, max_retries=1)
     output_config = {"effort": "low"}

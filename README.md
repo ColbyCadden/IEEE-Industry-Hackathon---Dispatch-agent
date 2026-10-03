@@ -72,4 +72,12 @@ flowchart LR
 3. `python agent_starter.py`
 4. Change crew count or the disruption and run it again.
 
+### Claude API key (for the LLM features)
+
+1. Copy `.env.example` to a new file named `.env` in the repo root.
+2. Paste your own key after `ANTHROPIC_API_KEY=` and save.
+3. Check it: `python -c "from dispatch.llm import has_api_key; print(has_api_key())"` should print `True`.
+
+`.env` is gitignored, so each person keeps their own key on their own machine. **Never commit a real key** (and never put one in `.env.example`). Without a key, the app still runs using the regex parser and template briefings.
+
 Data notes: [`data/README.md`](data/README.md). **Python 3.10+** (3.11 is best).

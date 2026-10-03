@@ -120,3 +120,20 @@ hr { border: none; border-top: 1px solid rgba(255,255,255,0.1); margin: 8px 0; }
 body.night-mode #control-panel { background: rgba(10,15,30,0.9); }
 body.night-mode #help-text { background: rgba(20,20,60,0.6); }
 body.night-mode #stats-hud { background: rgba(10,15,30,0.6); }
+/* ---- Horizontal control panel: sections flow left-to-right in columns so
+ * nothing is pushed off the bottom of the screen. Collapsed = small pill. ---- */
+#control-panel:not(.panel-collapsed) {
+  width: auto; max-width: calc(100vw - 24px);
+  left: 12px; right: 12px;               /* span the top of the screen */
+}
+#control-panel.panel-collapsed { width: 260px; left: auto; }
+#control-panel:not(.panel-collapsed) #panel-body {
+  display: flex; flex-direction: row; flex-wrap: wrap;
+  align-items: flex-start; gap: 6px 22px;
+  max-height: 70vh !important; overflow-y: auto; overflow-x: hidden;
+}
+#control-panel:not(.panel-collapsed) #panel-body > * {
+  flex: 0 0 auto; min-width: 190px; max-width: 260px; margin: 0;
+}
+#control-panel:not(.panel-collapsed) #panel-body > hr { display: none; }
+#control-panel:not(.panel-collapsed) #panel-body > button { min-width: 160px; }

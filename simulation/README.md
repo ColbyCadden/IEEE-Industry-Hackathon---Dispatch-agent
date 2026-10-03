@@ -373,3 +373,16 @@ you can go back, and ask it to explain anything it edits before you accept it.
 
 Built with AI coding assistance in places. See `CREDITS.md` for upstream
 attribution and `HISTORY.md` for how it was built.
+
+## Quick start (Windows)
+
+1. `setup.bat` - once. Creates `.venv`, installs SUMO + OR-Tools. Paste an ElevenLabs
+   key into `.env` (`ELEVENLABS_API_KEY=...`) for the agent's voice (optional).
+2. `start_all.bat` - starts the server, opens http://localhost:8765/ and runs the agent
+   team every 5 minutes. Keep that window open.
+
+Agent team (`agents/`): `requests311` (live Calgary 311 + your CSV) -> `dispatch.fake_priority`
+(DEMO priority list; replace with the real priority agent - same `priority_list.csv` columns)
+-> `dispatch.planner` (8 prioritised stops per team, 5 teams, OR-Tools + sumolib routing)
+-> `simulator` (traffic plan). `dispatch.calls` turns caller updates into priority/route changes.
+Display layers (311 pins, routes, calls) never affect SUMO traffic.

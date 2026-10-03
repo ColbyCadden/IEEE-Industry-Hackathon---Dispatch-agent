@@ -41,6 +41,16 @@ def cycle(apply=False, quiet=False):
     if code != 0:
         print("scraper reported failures (see above)", file=sys.stderr)
 
+    # Priority list: the real priority agent will write agents/data/priority_list.csv.
+    # Until it exists, a clearly-labelled DEMO list is generated so routing has input.
+    if not os.path.exists(os.path.join(ROOT, "agents", "data", "priority_list.csv")):
+        _, o = _run(["agents.dispatch.fake_priority"])
+        print(o.strip())
+    code3, o3 = _run(["agents.dispatch.planner"])
+    print(o3.strip().splitlines()[0] if o3.strip() else "planner: no output")
+    if code3 != 0:
+        print("route planner failed: " + o3, file=sys.stderr)
+
     sim_args = ["agents.simulator.run"]
     if apply:
         sim_args.append("--apply")

@@ -220,6 +220,10 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
             self._handle_sources()
         elif path == '/requests.json':
             self._handle_requests()
+        elif path == '/routes.json':
+            self._serve_data_file('routes.json', '{"teams": []}')
+        elif path == '/updates.json':
+            self._handle_updates()
         elif path == '/potholes.json':
             self._handle_potholes()
         else:
@@ -228,6 +232,10 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
     def do_POST(self):
         if self.path == '/control':
             self._handle_control()
+        elif self.path == '/call':
+            self._handle_call()
+        elif self.path == '/tts':
+            self._handle_tts()
         else:
             self._send_json(404, {'error': 'Not found'})
 
@@ -255,8 +263,115 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
                                 'location': r['location'], 'x': float(r['x']), 'y': float(r['y'])})
         except FileNotFoundError:
             pass
+        # Overlay live call updates (resolved / reopened / escalated) on the city data.
+        try:
+            root = os.path.normpath(os.path.join(_HERE, os.pardir, os.pardir))
+            if root not in sys.path:
+                sys.path.insert(0, root)
+            from agents.dispatch import updates as U
+            st = U.state()
+            for r in out:
+                if r['id'] in st['resolved']:
+                    r['status'] = 'Closed'; r['by_call'] = True
+                elif any(u['request_id'] == r['id'] and u['action'] == 'reopened' for u in U.load()):
+                    r['status'] = 'Open'; r['by_call'] = True
+                if st['delta'].get(r['id'], 0) > 0:
+                    r['escalated'] = True
+        except Exception:
+            pass
         self._send_json(200, {'requests': out,
                               'mtime': os.path.getmtime(f) if os.path.exists(f) else None})
+
+    # ---- Dispatch: routes, live updates, calls, ElevenLabs TTS ----
+    # Display / planning only: nothing here touches SUMO traffic.
+    def _serve_data_file(self, name, default):
+        f = os.path.join(_HERE, os.pardir, os.pardir, 'agents', 'data', name)
+        try:
+            with open(f, 'rb') as fh:
+                body = fh.read()
+        except FileNotFoundError:
+            body = default.encode()
+        self.send_response(200)
+        self._cors_headers()
+        self.send_header('Content-Type', 'application/json')
+        self.send_header('Content-Length', str(len(body)))
+        self.send_header('Cache-Control', 'no-store')
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _read_json_body(self):
+        cl = int(self.headers.get('Content-Length', 0))
+        try:
+            return json.loads(self.rfile.read(cl).decode('utf-8') or '{}')
+        except json.JSONDecodeError:
+            return None
+
+    def _handle_updates(self):
+        root = os.path.normpath(os.path.join(_HERE, os.pardir, os.pardir))
+        if root not in sys.path:
+            sys.path.insert(0, root)
+        from agents.dispatch import updates as U
+        st = U.state()
+        self._send_json(200, {'resolved': sorted(st['resolved']), 'delta': st['delta'],
+                              'log': U.load()[-30:]})
+
+    def _handle_call(self):
+        body = self._read_json_body()
+        if body is None:
+            self._send_json(400, {'error': 'Invalid JSON'})
+            return
+        root = os.path.normpath(os.path.join(_HERE, os.pardir, os.pardir))
+        if root not in sys.path:
+            sys.path.insert(0, root)
+        try:
+            from agents.dispatch import calls
+            res = calls.handle_call(body.get('transcript', ''), caller=body.get('caller', 'caller'),
+                                    request_id=body.get('request_id'), action=body.get('action'),
+                                    replan_now=not body.get('wait'))
+            if body.get('wait') and res.get('applied'):
+                calls.replan(blocking=True)
+            self._send_json(200, res)
+        except Exception as e:
+            self._send_json(500, {'error': str(e)})
+
+    def _handle_tts(self):
+        """Proxy to ElevenLabs text-to-speech so the API key stays server-side."""
+        import urllib.request, urllib.error
+        body = self._read_json_body() or {}
+        text = (body.get('text') or '')[:400]
+        key = os.environ.get('ELEVENLABS_API_KEY')
+        if not key:
+            for envf in (os.path.join(_HERE, os.pardir, os.pardir, '.env'),      # simulation/.env (gitignored)
+                         os.path.join(os.environ.get('LOCALAPPDATA', ''), 'hermes', '.env')):
+                try:
+                    for line in open(envf, encoding='utf-8'):
+                        if line.startswith('ELEVENLABS_API_KEY='):
+                            key = line.split('=', 1)[1].strip().strip('"\'')
+                except OSError:
+                    pass
+        if not key or not text:
+            self._send_json(503, {'error': 'ELEVENLABS_API_KEY not configured' if not key else 'no text'})
+            return
+        voice = body.get('voice') or os.environ.get('ELEVENLABS_VOICE_ID', 'JBFqnCBsd6RMkjVDRZzb')
+        req = urllib.request.Request(
+            'https://api.elevenlabs.io/v1/text-to-speech/%s?output_format=mp3_44100_64' % voice,
+            data=json.dumps({'text': text, 'model_id': 'eleven_flash_v2_5'}).encode(),
+            headers={'xi-api-key': key, 'Content-Type': 'application/json'}, method='POST')
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:
+                audio = r.read()
+        except urllib.error.HTTPError as e:
+            self._send_json(502, {'error': 'ElevenLabs %d' % e.code})
+            return
+        except Exception as e:
+            self._send_json(502, {'error': str(e)})
+            return
+        self.send_response(200)
+        self._cors_headers()
+        self.send_header('Content-Type', 'audio/mpeg')
+        self.send_header('Content-Length', str(len(audio)))
+        self.end_headers()
+        self.wfile.write(audio)
 
     # ---- Potholes endpoint (display only; never touches SUMO) ----
     def _handle_potholes(self):

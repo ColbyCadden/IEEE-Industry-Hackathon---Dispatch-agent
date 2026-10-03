@@ -43,6 +43,7 @@ async function refresh() {
       const p = pin(CATS[r.category][1], closed);
       p.position.set(r.x - CEN.x, 0, -(r.y - CEN.y));
       p.userData = r;
+      if (r.escalated && !closed) p.scale.setScalar(1.5);   // urgent per caller
       g.add(p);
       counts[r.category][closed ? 1 : 0]++;
     });
@@ -72,6 +73,7 @@ async function refresh() {
     box.appendChild(row);
   });
   if (body) body.insertBefore(box, body.firstChild);
+  window.__refreshRequests = refresh;     // dispatch.js calls this after a live update
   refresh();
-  setInterval(refresh, 60000);
+  setInterval(refresh, 15000);
 })();

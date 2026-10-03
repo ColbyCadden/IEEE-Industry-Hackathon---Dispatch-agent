@@ -39,8 +39,10 @@ not one damaged sign. We wanted a dispatcher that a Roads supervisor could actua
 
 ### How we built it
 
-A Python pipeline (pandas, scikit-learn), with an LLM layer for language. **TODO: confirm the
-LLM and app details once they're built.**
+A deterministic Python pipeline (pandas, scikit-learn) does the planning. Claude (Anthropic API)
+handles language: it reads the supervisor's free-text crew update and writes the briefings. A
+Streamlit dashboard ties them together. Without an API key or network, a rule-based parser and
+template briefings take over, and the dashboard labels which one answered.
 
 1. **Clean.** We load the 311 sample and drop closed tickets. Duplicate reports of the same
    problem (same service type at the same spot, rounded to about 1 m) are merged into one job

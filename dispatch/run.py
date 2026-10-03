@@ -32,15 +32,25 @@ def main(event: dict = EVENT) -> None:
         "changes": changes,
     }
 
+    # What the supervisor hears at 8 a.m. and at noon. The rule-based template keeps this file
+    # reproducible; the dashboard asks Claude for the same briefings when a key is set.
+    from dispatch.llm import template_briefing
+    briefings = {
+        "8am": template_briefing(plan_8am, metrics, "8am"),
+        "noon": template_briefing(plan_noon, metrics, "noon", changes, event),
+    }
+
     OUT.mkdir(parents=True, exist_ok=True)
     _write("plan_8am.json", plan_8am)
     _write("plan_fifo.json", plan_fifo)
     _write("plan_noon.json", plan_noon)
     _write("metrics.json", metrics)
     _write("event.json", event)
+    _write("briefings.json", briefings)
 
     for key in ("8am", "fifo", "noon"):
         print(f"{key:>5}: {metrics[key]}")
+    print(f"\n8 a.m. briefing: {briefings['8am']}\n\nnoon briefing:   {briefings['noon']}")
 
 
 if __name__ == "__main__":

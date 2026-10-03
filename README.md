@@ -1,83 +1,108 @@
-# Case 1 - Who should 311 send next?
+# Who should 311 send next? — a dispatch agent for Calgary Roads
 
-**Stream:** Software and Computational Math  
-**Event:** IEEE YP Industry Hackathon  
-**Dates:** October 2–4, 2026 | Collision Space, Hunter Hub, University of Calgary
+IEEE YP Industry Hackathon · Software and Computational Math · Case 1 ([case brief](docs/CASE_BRIEF.md))
 
----
+Oldest-first (FIFO) dispatch is fair to the queue, not to the public: a missing stop sign waits
+behind yesterday's parking complaint. This agent scores open 311 tickets by hazard, assigns a day
+of work to 8 crews × 5 jobs, and replans when a crew calls in sick. It then tells the Roads
+supervisor what changed, in plain English.
 
-## The problem (in plain words)
+## Results (frozen sample, same crews and zones for both plans)
 
-Calgary 311 is a pile of potholes, ice, garbage, and signs. If every crew takes the **oldest** ticket, a safety problem sits behind a backlog of small complaints. Then a blizzard hits - or a crew calls in sick - and the 7 a.m. plan is wrong.
+| 8 crews × 5 jobs | Oldest-first (FIFO) | Agent, 8 a.m. | Agent, noon (crew 4 out) |
+|---|---|---|---|
+| Safety tickets covered (30 in the backlog) | 16 | **30** | **30** |
+| Total priority P served | 99.0 | **125.75** | 112.75 |
+| Jobs on the plan | 40 | 40 | 35 |
+| Moved to another crew / dropped | — | — | 2 / 5 (**0 safety dropped**) |
 
-This is a tiny **job shop**: jobs (tickets), machines (crews), and one disruption.
+- **Data:** 200 raw tickets → 122 open → 104 after merging duplicate reports → 99 field-crew
+  tickets (licence inspections and seniors' inquiries aren't field-crew work).
+- **Robustness:** we changed every type weight by ±1 (16 variations). The agent beat FIFO on
+  safety in all 16, by +9 to +15 tickets (`python -m tests.sensitivity`).
+- **Improvement round:** the first replan let a displaced job bump work anywhere in the city.
+  One job travelled 34.9 km. Limiting moves to the 3 nearest crews keeps moves to 11–12 km,
+  costs 0.75 P, and still drops no safety ticket.
+- **Starter bug we caught:** the starter's `"ice" in name` check matches "Serv**ice**s" and
+  "L**ice**nce". Its "priority" plan spent 28 of 40 slots on cart deliveries, commercial
+  collection and licence inspections, and scheduled 23 already-closed tickets.
 
-**Your challenge:** Score open tickets and assign them to a few crews for one day. Beat oldest-first. Then apply **one** disruption (blizzard: ice/snow jumps, **or** one crew disappears) and **reassign**. Report how many jobs moved.
-
----
-
-## Who would use this
-
-311, Roads, or Waste & Recycling. You are selling **the right work done** when capacity drops.
-
----
-
-## Steps
-
-1. Load the 311 sample. Keep service type, community, date.
-2. Give each ticket a priority (safety types higher). Assign up to `C` crews × `K` jobs each.
-3. Baseline = oldest tickets first, ignore type.
-4. Disruption. Replan. Count jobs that changed crew or dropped.
-5. What you would tell the supervisor at 8 a.m. and at noon.
-
-Keep geography simple (optional “same community” bonus). Full street routing is Case 2.
-
----
-
-## Picture of the loop
+## How it works
 
 ```mermaid
 flowchart LR
-  A[Load tickets] --> B[Priority vs oldest-first]
-  B --> C[Assign crews]
-  C --> D[Blizzard or sick crew]
-  D --> C
+  A[311 CSV<br/>frozen sample] --> B[Clean<br/>drop Closed,<br/>merge duplicates]
+  B --> C[Score<br/>P = weight + 0.25·days + 0.5·extra reports]
+  C --> D[Zone crews<br/>KMeans on lat/lon, seeded]
+  D --> E[Assign<br/>priority order vs FIFO,<br/>same fill function]
+  E --> F[8 a.m. plan + briefing]
+  G[Sick call, free text] --> H[Parse<br/>Claude, regex fallback]
+  H --> I[Supervisor confirms]
+  I --> J[Replan<br/>bump lowest-P job,<br/>3 nearest crews only]
+  F --> J
+  J --> K[Noon plan + briefing<br/>moved / dropped counts]
 ```
 
-**FIFO** = first in, first out = oldest ticket first.
+| Step | File | What it does |
+|---|---|---|
+| Clean | `dispatch/data_prep.py` | Loads the CSV, drops Closed tickets, merges duplicate reports (same type, same spot to ~1 m) into one job with a `reports` count |
+| Weights | `dispatch/weights.py` | One reviewable table: 3 = safety hazard, 2 = road hazard, 1 = service, 0 = not a field-crew job; a reason for every weight |
+| Score | `dispatch/scoring.py` | P = weight + 0.25 × days open + 0.5 × (reports − 1) |
+| Assign | `dispatch/assign.py` | KMeans zones (seeded); walks tickets in priority or FIFO order and gives each to the nearest crew with room |
+| Replan | `dispatch/replan.py` | Removes the sick crew's jobs; each one, highest P first, may bump a strictly lower-P job from one of its 3 nearest crews; logs moved/dropped |
+| Metrics | `dispatch/metrics.py` | P served, safety count, jobs, moved, dropped, safety dropped |
+| Language | `dispatch/llm.py` | Claude turns a free-text sick call into a structured event and writes the briefings; regex and template fallbacks run without a key or network |
+| Pipeline | `dispatch/run.py` | Runs everything; writes `dispatch/outputs/*.json`, including the 8 a.m. and noon briefings |
+| Dashboard | `dispatch/app.py` | Streamlit: agent vs FIFO, map, crews, briefing, and the sick-call → confirm → replan loop |
 
----
+The planning is deterministic code. Claude only reads the supervisor's message and writes the
+briefing from numbers the code computed. Every parse is shown to the supervisor before it changes
+the plan.
 
-## New words
+## Run it
 
-| Word | Meaning |
+Python 3.10 or newer.
+
+```bash
+pip install -r requirements.txt
+python -m dispatch.run                    # rebuild the plans and outputs; prints both briefings
+python -m streamlit run dispatch/app.py   # dashboard at http://localhost:8501
+python -m tests.test_core                 # 11 checks, including the numbers above
+python -m tests.sensitivity               # the ±1 weight table
+```
+
+The output files are committed, so the dashboard also works without running the pipeline first.
+
+**Claude (optional).** Copy `.env.example` to `.env` and put your key after `ANTHROPIC_API_KEY=`.
+`.env` is gitignored. Without a key, or without internet, the app uses the rule-based parser and
+template briefings, and labels them as such on screen. Check the key with
+`python -c "from dispatch.llm import has_api_key; print(has_api_key())"`.
+
+## Limits (what this does not do)
+
+- **Frozen data.** A 200-ticket Open Calgary 311 sample (Aug 25–27, 2026), planned as of Aug 28,
+  2026. Nothing is live.
+- **No street addresses.** The address column in the source is empty. A job's location is its
+  latitude/longitude and community name.
+- **No routing.** Jobs are assigned to crews, not sequenced into routes. Distance is straight
+  line to a crew's zone centre. Street routing is Case 2.
+- **Every job is assumed to take the same time.** There are no crew skills or equipment.
+- **One disruption at a time.** Each replan starts again from the 8 a.m. plan. A blizzard
+  scenario is not implemented.
+- **Weights are our judgement,** not City policy. The sensitivity test shows the result doesn't
+  hinge on any single weight.
+- **FIFO here ignores type for ordering,** but draws from the same 99 field-crew tickets as the
+  agent, so both plans pick from the same eligible work.
+
+## Repo layout
+
+| Path | Contents |
 |---|---|
-| FIFO | Oldest request first |
-| Dispatch | Matching jobs to crews |
-| Disruption | Something that breaks the morning plan |
+| `dispatch/` | The pipeline and dashboard above; `outputs/` holds the generated plans and briefings |
+| `tests/` | `test_core.py` (sanity checks and verified numbers), `sensitivity.py` (weight robustness) |
+| `data/` | The 311 sample and its source notes |
+| `docs/` | Case brief, pitch outline, submission draft |
+| `agent_starter.py` | The organizers' starter, kept unmodified for reference (it contains the "ice" bug above) |
+| `simulation/` | A separate teammate prototype (SUMO traffic simulation and 3D city view). It is not part of the dispatch pipeline above and has its own README |
 
----
-
-## Watch or read (optional)
-
-- [Calgary 311](https://www.calgary.ca/311.html)
-- [FIFO queues (Wikipedia)](https://en.wikipedia.org/wiki/FIFO_(computing_and_electronics))
-
----
-
-## Start here
-
-1. Open a terminal **in this folder**.
-2. `pip install -r requirements.txt`
-3. `python agent_starter.py`
-4. Change crew count or the disruption and run it again.
-
-### Claude API key (for the LLM features)
-
-1. Copy `.env.example` to a new file named `.env` in the repo root.
-2. Paste your own key after `ANTHROPIC_API_KEY=` and save.
-3. Check it: `python -c "from dispatch.llm import has_api_key; print(has_api_key())"` should print `True`.
-
-`.env` is gitignored, so each person keeps their own key on their own machine. **Never commit a real key** (and never put one in `.env.example`). Without a key, the app still runs using the regex parser and template briefings.
-
-Data notes: [`data/README.md`](data/README.md). **Python 3.10+** (3.11 is best).
+Data: The City of Calgary, Open Calgary — 311 Service Requests, Open Government Licence – City of Calgary.

@@ -82,28 +82,37 @@ flowchart LR
 
 ## 4. Live demo script (1:30)
 
-> **TODO (app owner):** the Streamlit app and `llm.parse_event` / `llm.briefing` are not built
-> yet. Confirm every button label and step below against the real app, and rehearse once
-> end to end. If the app is not ready, run the CLI fallback at the bottom.
+Before going on stage:
+- Run `python -m streamlit run dispatch/app.py` and open http://localhost:8501 at 125% zoom.
+- Check the caption under the briefing:
+  - "Written by Claude" means the key and network work.
+  - "rule-based template briefing" means you're running offline. That's fine, but say so if asked.
+- On venue wifi with no internet, set `USE_LLM = False` in `dispatch/llm.py`. Otherwise each
+  Claude attempt waits for a timeout before falling back.
 
-Before going on stage: `python -m dispatch.run`, then `streamlit run dispatch/app.py`, browser
-open at the app, zoom 125%, API key set (or template fallback confirmed working).
+1. **The headline card shows "30 vs 16".** Say: "Same 8 crews, same zones. Our agent covers all
+   30 safety hazards; oldest-first covers 16."
+2. **Under "Plan shown", click "FIFO".** The map and crew cards switch to the oldest-first plan.
+   Say: "14 potholes and broken signs are left for another day." Click "Agent" to go back.
+3. **Click "Crew 1 · E"** in the crew grid. The map isolates that crew's jobs, and the side panel
+   lists them with exact coordinates. Click a job to show its priority breakdown, then
+   "Clear job" and "Clear crew".
+4. **Read the first two lines of the 8 a.m. briefing aloud.**
+5. **Type in the crew update box:** `hey it's crew 4, two guys called in sick, we're done today`,
+   then click **Submit update**. The "Agent's interpretation" panel shows the text it received and
+   what it understood: crew out, crew 4, 0% capacity.
+6. **Click "Confirm and replan".**
+   - The view switches to "Agent - noon".
+   - Moved shows **2**, to crew 5 in the S zone, 11–12 km away.
+   - Deferred shows **5**, "0 of them safety tickets".
+   - Crew 4's card reads "Out today".
+7. **Read the noon briefing.**
+8. *(If time allows)* type `someone called in sick` and submit. The agent asks "Which crew is
+   affected?" instead of guessing. Answer `4`.
 
-1. **Click "8 a.m. plan".** Point at the map: 8 colour-coded zones, 40 jobs.
-   Say: "Every crew gets 5 jobs near its zone; every one of the 30 safety problems is on today's plan."
-2. **Click the "FIFO" toggle.** Say: "Same crews, same zones, oldest-first. Only 16 safety
-   problems — 14 potholes and broken signs are left for another day."
-3. **Toggle back to "Agent".** Read the first two lines of the 8 a.m. briefing aloud.
-4. **Type in the sick-call box:** `Crew 4 called in sick, they're out for the day.`
-   **Click "Apply".** Show the parsed event: `crew_out`, crew 4.
-5. **Point at the noon plan:** crew 4 is empty; 2 of its jobs moved to crew 5 (S zone,
-   11–12 km away), 5 lower-priority jobs dropped — **0 of them safety**.
-6. **Read the noon briefing** — what changed and why.
-7. *(If time allows)* type something vague, e.g. `someone on the south crew isn't feeling great`,
-   and show the agent asking a clarifying question instead of guessing.
-
-**CLI fallback** (if the app fails): `python -m dispatch.run`, then
-`python -m tests.test_core` (7 PASS) and `python -m tests.sensitivity` (table below).
+**CLI fallback** (if the app fails): run `python -m dispatch.run`, which prints the numbers and
+both briefings. Then run `python -m tests.test_core` (11 PASS) and `python -m tests.sensitivity`
+(table below).
 
 ## 5. Results vs FIFO (0:30)
 

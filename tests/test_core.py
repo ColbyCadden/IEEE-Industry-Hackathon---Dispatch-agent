@@ -103,6 +103,46 @@ def test_no_safety_dropped_over_lower_p_nonsafety():
     assert not bad, "; ".join(bad)
 
 
+def test_verified_numbers():
+    from dispatch.metrics import compute
+    agent, fifo = plans()
+    new_plan, changes = replanned()
+    assert len(scored()) == 99, f"{len(scored())} field-crew tickets, expected 99"
+    assert compute(agent) == {"P": 125.75, "safety": 30, "n": 40}, compute(agent)
+    assert compute(fifo) == {"P": 99.0, "safety": 16, "n": 40}, compute(fifo)
+    noon = compute(new_plan, changes)
+    assert (noon["n"], noon["moved"], noon["dropped"], noon["safety_dropped"]) == (35, 2, 5, 0), noon
+
+
+def test_plans_are_deterministic():
+    from dispatch.assign import make_plan
+    assert make_plan(scored(), order="priority") == plans()[0], "priority plan changed between runs"
+    assert make_plan(scored(), order="fifo") == plans()[1], "fifo plan changed between runs"
+
+
+def test_replan_is_repeatable_and_leaves_input_alone():
+    from dispatch.replan import apply_event
+    agent, _ = plans()
+    before = [len(c["jobs"]) for c in agent["crews"]]
+    again = apply_event(agent, {"event": "crew_out", "crew": SICK_CREW, "capacity": 0.0})
+    assert again[1]["moved"] == replanned()[1]["moved"] and again[1]["dropped"] == replanned()[1]["dropped"]
+    assert [len(c["jobs"]) for c in agent["crews"]] == before, "apply_event modified the 8 a.m. plan"
+
+
+def test_bad_events_fail_loudly_or_do_nothing():
+    from dispatch.replan import apply_event
+    agent, _ = plans()
+    for bad in ({"event": "crew_out", "crew": 9, "capacity": 0.0},
+                {"event": "crew_partial", "crew": 2, "capacity": 1.5}):
+        try:
+            apply_event(agent, bad)
+        except ValueError:
+            continue
+        raise AssertionError(f"{bad} was accepted")
+    same, changes = apply_event(agent, {"event": "unclear", "crew": None, "capacity": 1.0, "question": "?"})
+    assert same == agent and not changes["moved"] and not changes["dropped"], "unclear event changed the plan"
+
+
 TESTS = [v for k, v in list(globals().items()) if k.startswith("test_")]
 
 

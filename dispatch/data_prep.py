@@ -6,12 +6,7 @@ import pandas as pd
 DATA = Path(__file__).resolve().parent.parent / "data" / "311_dispatch_sample.csv"
 
 
-def load_tickets(path: Path = DATA, open_only: bool = True) -> pd.DataFrame:
-    """Return tickets with service_name, comm_name, requested_date, lon/lat, age_days."""
-    raise NotImplementedError
-
-
-def load_clean_tickets(path="data/311_dispatch_sample.csv") -> pd.DataFrame:
+def load_clean_tickets(path=DATA) -> pd.DataFrame:
     """Return one row per open problem, deduped by service + location.
 
     Duplicate reports (same service_name at the same lat/lon rounded to 5
@@ -39,7 +34,7 @@ def load_clean_tickets(path="data/311_dispatch_sample.csv") -> pd.DataFrame:
 
 
 if __name__ == "__main__":
-    raw = pd.read_csv("data/311_dispatch_sample.csv")
+    raw = pd.read_csv(DATA)
     filtered = raw[raw["status_description"] != "Closed"]
     clean = load_clean_tickets()
     print(f"Total rows:            {len(raw)}")

@@ -15,6 +15,9 @@ USE_LLM = True  # set False to force the regex / template fallbacks
 
 log = logging.getLogger(__name__)
 _client = None
+# Who produced the last parse / briefing: "claude", or "fallback: <reason>". Lets the UI say
+# honestly whether Claude answered or the regex/template did.
+last_source = {"parse": None, "briefing": None}
 
 _NUMBER_WORDS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8}
 _CREW_RE = re.compile(r"\bcrew\s*(?:#|no\.?|number)?\s*(\d+|" + "|".join(_NUMBER_WORDS) + r")\b", re.I)
@@ -58,8 +61,9 @@ def load_env(path: Path = ENV_FILE) -> None:
 
 
 def has_api_key() -> bool:
+    """True only for something shaped like a real key; a leftover placeholder counts as no key."""
     load_env()
-    return bool(os.environ.get("ANTHROPIC_API_KEY"))
+    return os.environ.get("ANTHROPIC_API_KEY", "").startswith("sk-ant-")
 
 
 def _ask_claude(system: str, user: str, max_tokens: int, output_format: dict | None = None) -> str:
@@ -142,15 +146,21 @@ def llm_parse_event(text: str) -> dict:
     try:
         reply = _ask_claude(_EVENT_SYSTEM, text or "", max_tokens=200, output_format=_EVENT_FORMAT)
         reply = reply.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
-        return _valid_event(json.loads(reply))
+        event = _valid_event(json.loads(reply))
+        last_source["parse"] = "claude"
+        return event
     except Exception as e:
         log.info("llm_parse_event fell back to regex: %s: %s", type(e).__name__, e)
+        last_source["parse"] = f"fallback: {type(e).__name__}"
         return regex_parse_event(text)
 
 
 def parse_event(text: str) -> dict:
     """{"event": "crew_out"|"crew_partial"|"unclear", "crew", "capacity", "question"}."""
-    return llm_parse_event(text) if USE_LLM else regex_parse_event(text)
+    if USE_LLM:
+        return llm_parse_event(text)
+    last_source["parse"] = "fallback: USE_LLM is off"
+    return regex_parse_event(text)
 
 
 def _split_metrics(metrics: dict, when: str) -> tuple[dict, dict | None]:
@@ -209,7 +219,7 @@ def template_briefing(plan: dict, metrics: dict, when: str = "8am", changes: dic
              f"so the plan now covers {_plural(n, 'job')} with {safety} safety tickets."]
     lines.append(f"{_plural(moved, 'job')} {'was' if moved == 1 else 'were'} moved to nearby crews "
                  f"and {_plural(dropped, 'lower-priority job')} {'was' if dropped == 1 else 'were'} "
-                 f"deferred to tomorrow.")
+                 f"deferred (not done today).")
     if safety_dropped == 0:
         lines.append("No safety tickets were dropped.")
     elif safety_dropped:
@@ -253,7 +263,7 @@ def _briefing_facts(plan: dict, metrics: dict, when: str, changes: dict | None, 
     facts.update({
         "disruption": what,
         "jobs_moved_to_other_crews": m.get("moved", len(changes.get("moved", []))),
-        "jobs_deferred_to_tomorrow": m.get("dropped", len(changes.get("dropped", []))),
+        "jobs_deferred_not_done_today": m.get("dropped", len(changes.get("dropped", []))),
         "safety_tickets_deferred": "unknown" if safety_dropped is None else safety_dropped,
         "deferred_job_types": [j["type"] for j in changes.get("dropped_jobs", [])],
     })
@@ -281,9 +291,12 @@ def llm_briefing(plan: dict, metrics: dict, when: str = "8am", changes: dict | N
             task = ("This is the noon replan briefing. Say what happened, how many jobs moved to other crews, "
                     "how many were deferred, and say explicitly whether any safety tickets were dropped.")
         user = f"{task}\n\nData:\n{json.dumps(facts, indent=1)}"
-        return _ask_claude(_BRIEFING_SYSTEM, user, max_tokens=400)
+        text = _ask_claude(_BRIEFING_SYSTEM, user, max_tokens=400)
+        last_source["briefing"] = "claude"
+        return text
     except Exception as e:
         log.info("llm_briefing fell back to template: %s: %s", type(e).__name__, e)
+        last_source["briefing"] = f"fallback: {type(e).__name__}"
         return template_briefing(plan, metrics, when, changes, event)
 
 
@@ -292,6 +305,7 @@ def briefing(plan: dict, metrics: dict, when: str = "8am", changes: dict | None 
     """3-4 plain-English sentences for a roads supervisor. Claude first, template fallback."""
     if USE_LLM:
         return llm_briefing(plan, metrics, when, changes, event)
+    last_source["briefing"] = "fallback: USE_LLM is off"
     return template_briefing(plan, metrics, when, changes, event)
 
 
@@ -317,6 +331,7 @@ if __name__ == "__main__":
     extras = ["crew 9 is sick", "crew 3 checking in", "Crew five is short two people", "crew 6 off today"]
     all_ok = True
 
+    print(f"API key usable: {has_api_key()}  (without one, the USE_LLM=True run below is really the fallback)")
     for USE_LLM in (True, False):
         print(f"\n===== USE_LLM = {USE_LLM} =====\n")
         print("8am:  ", briefing(plan_8am, metrics, "8am"))
@@ -340,6 +355,7 @@ if __name__ == "__main__":
         for text in extras:
             print(f"      {text!r:54} -> {parse_event(text)}")
         print("\nALL PASS" if ok else "\nSOME FAILED")
+        print(f"answered by: parse={last_source['parse']}  briefing={last_source['briefing']}")
         all_ok &= ok
 
     print("\nBOTH PATHS PASS" if all_ok else "\nA PATH FAILED")

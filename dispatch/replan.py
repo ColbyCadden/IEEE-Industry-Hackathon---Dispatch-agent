@@ -28,7 +28,10 @@ def apply_event(plan: dict, event: dict, jobs: int = JOBS_PER_CREW) -> tuple[dic
     if out_id not in crews:
         raise ValueError(f"crew {out_id!r} is not in the plan")
 
-    keep = 0 if kind == "crew_out" else round(jobs * float(event.get("capacity", 0.0)))
+    capacity = float(event.get("capacity", 0.0))
+    if not 0.0 <= capacity <= 1.0:
+        raise ValueError(f"capacity must be between 0 and 1, got {capacity}")
+    keep = 0 if kind == "crew_out" else round(jobs * capacity)
     out_crew = crews[out_id]
     out_crew["jobs"].sort(key=lambda j: j["P"], reverse=True)
     displaced = out_crew["jobs"][keep:]

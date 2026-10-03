@@ -112,10 +112,13 @@ def _source(kind: str) -> str:
     return "claude" if src == "claude" else "rules"
 
 
-def safe_parse(text: str) -> tuple[dict | None, str | None]:
-    """llm.parse_event(text) checked against the contract. Returns (event, error)."""
+def safe_parse(text: str, only_crew: int | None = None) -> tuple[dict | None, str | None]:
+    """llm.parse_event(text) checked against the contract. Returns (event, error).
+
+    only_crew: the supervisor already chose a crew (after "which one first?").
+    """
     try:
-        ev = llm.parse_event(text)
+        ev = llm.parse_event(text, only_crew) if only_crew is not None else llm.parse_event(text)
         if not isinstance(ev, dict) or ev.get("event") not in EVENTS:
             raise ValueError(f"unexpected result {ev!r}")
         if ev["event"] != "unclear" and ev.get("crew") not in range(1, 9):
@@ -125,6 +128,7 @@ def safe_parse(text: str) -> tuple[dict | None, str | None]:
         if not 0.0 <= float(ev["capacity"]) <= 1.0:
             raise ValueError(f"capacity must be 0-1, got {ev['capacity']!r}")
         ev["source"] = _source("parse")
+        ev["why"] = (getattr(llm, "last_source", None) or {}).get("parse") or ""
         return ev, None
     except Exception as e:
         return None, f"{type(e).__name__}: {e}"
@@ -173,6 +177,8 @@ def describe(event: dict) -> str:
     kind, crew = event.get("event"), event.get("crew")
     if kind == "crew_out":
         return f"Crew {crew} is **out for the day**. All of its jobs will be reassigned or deferred."
+    if kind == "crew_partial" and event.get("capacity", 0.5) >= 1.0:
+        return f"Crew {crew} is **at full strength**. Nothing to replan: showing the 8 a.m. plan."
     if kind == "crew_partial":
         cap = event.get("capacity", 0.5)
         return (f"Crew {crew} is **short-handed** ({cap:.0%} capacity). "
@@ -470,6 +476,7 @@ ss.setdefault("parsed", None)
 ss.setdefault("parse_error", None)
 ss.setdefault("received", "")
 ss.setdefault("noon", None)
+ss.setdefault("applied", None)
 ss.setdefault("selected_job", None)
 ss.setdefault("selected_crew", None)
 
@@ -531,12 +538,30 @@ with right:
 
     st.subheader("Report a crew update")
 
-    def _fill(text: str) -> None:
-        ss.update_text, ss.parsed, ss.parse_error = text, None, None
+    def _apply(event: dict, received: str) -> None:
+        """Replan straight away: the supervisor's only step is submitting the update."""
+        clean = {k: v for k, v in event.items() if k not in ("source", "why", "candidates")}  # engine gets the contract dict
+        if clean["event"] == "crew_partial" and float(clean.get("capacity", 0.0)) >= 1.0:
+            ss.noon = None  # the crew is back: nothing to replan
+        else:
+            ss.noon = {**replan(data["plan_8am"], metrics, clean), "event": clean}
+        ss.applied = {"event": event, "received": received}
+        ss.parsed = ss.parse_error = None
+        ss.pop("view", None)
+
+    def _run(text: str, only_crew: int | None = None) -> None:
+        """Read the update and apply it. Only an ambiguous message stops to ask one question."""
+        ss.received = text.strip()
+        ss.applied = None
+        event, err = safe_parse(ss.received, only_crew)
+        if event and event["event"] != "unclear":
+            _apply(event, ss.received)
+        else:
+            ss.parsed, ss.parse_error = event, err
 
     def _submit() -> None:
-        ss.received = ss.update_text.strip()
-        ss.parsed, ss.parse_error = safe_parse(ss.received)
+        if ss.update_text.strip():
+            _run(ss.update_text)
 
     def _answer() -> None:
         """Re-read the original message together with the supervisor's answer to the question."""
@@ -545,17 +570,36 @@ with right:
             return
         if answer.isdigit() or answer.lower() in NUMBER_WORDS:
             answer = f"crew {answer}"  # a bare "4" answers "Which crew?"
-        ss.received = f"{ss.received}. {answer}"
-        ss.parsed, ss.parse_error = safe_parse(ss.received)
         ss.followup = ""
+        _run(f"{ss.received}. {answer}")
 
-    st.text_area("Crew update", key="update_text", height=90, label_visibility="collapsed",
-                 placeholder="Type a crew update, e.g. hey it's crew 4, two guys called in sick")
-    st.button("Submit update", type="primary", icon=":material/send:", on_click=_submit,
-              disabled=not ss.update_text.strip())
-    with st.expander("Example updates", expanded=False):
+    def _manual(crew: int, kind: str) -> None:
+        out = kind == "crew_out"
+        _apply({"event": kind, "crew": crew, "capacity": 0.0 if out else 0.5, "question": None,
+                "source": "manual"}, ss.get("received", ""))
+
+    with st.form("crew_update", clear_on_submit=True, border=False):
+        st.text_area("Crew update", key="update_text", height=90, label_visibility="collapsed",
+                     placeholder="Type a crew update and press Submit, e.g. hey it's crew 4, two guys called in sick")
+        st.form_submit_button("Submit update", type="primary", icon=":material/send:", on_click=_submit)
+    with st.expander("Try an example", expanded=False):
         for text in QUICK_FILLS:
-            st.button(text, type="tertiary", on_click=_fill, args=(text,), key=f"example_{text}")
+            st.button(text, type="tertiary", on_click=_run, args=(text,), key=f"example_{text}")
+
+    if ss.get("applied"):
+        ev, got = ss.applied["event"], ss.applied["received"]
+        how = {"claude": ":material/auto_awesome: Read by Claude", "manual": ":material/edit: Entered by hand"}.get(
+            ev.get("source"), ":material/rule: Read by the rule-based parser"
+            + (" (Claude unavailable: no API key or no connection)" if str(ev.get("why", "")).startswith("fallback")
+               else " (no Claude call needed)"))
+        with st.container(border=True):
+            st.markdown(f":material/check_circle: **Replanned.** {describe(ev)}")
+            if got:
+                st.caption(f"\u201c{got}\u201d")
+            st.caption(how)
+            st.caption("Every replan starts from the 8 a.m. plan; one crew update applies at a time.")
+            with st.expander("Parsed result (JSON)", expanded=False):
+                st.json({k: v for k, v in ev.items() if k not in ("source", "why")})
 
     if ss.get("parse_error") and not ss.parsed:
         with st.container(border=True):
@@ -564,68 +608,34 @@ with right:
             m_crew, m_kind = st.columns(2)
             crew = m_crew.selectbox("Crew", range(1, 9), index=3)
             kind = m_kind.radio("Status", ["Out for the day", "Short-handed (50%)"])
-            if st.button("Use this update"):
-                ss.parsed = {"event": "crew_out" if kind.startswith("Out") else "crew_partial", "crew": crew,
-                             "capacity": 0.0 if kind.startswith("Out") else 0.5, "question": None,
-                             "source": "manual"}
-                ss.parse_error = None
-                st.rerun()
+            st.button("Use this update", on_click=_manual, args=(crew, "crew_out" if kind.startswith("Out") else "crew_partial"))
 
-    if ss.parsed:
+    if ss.parsed:  # only reached for an ambiguous message
         event = ss.parsed
         with st.container(border=True):
-            st.markdown("**:material/psychology: Agent's interpretation**")
-            st.caption({"claude": ":material/auto_awesome: Read by Claude",
-                        "manual": ":material/edit: Entered by hand"}.get(
-                event.get("source"),
-                ":material/rule: Read by the rule-based parser (Claude unavailable: no API key or no connection)"))
-            st.caption("Received")
+            st.markdown("**:material/help: One detail needed**")
             st.code(ss.get("received", ""), language=None, wrap_lines=True)
-
-            if event["event"] == "unclear":
-                st.caption("Understood")
-                st.badge("Unclear: needs one more detail", icon=":material/help:", color="orange")
-                st.info(f"**{event.get('question') or 'Which crew is affected?'}**", icon=":material/help:")
-                st.text_input("Your answer", key="followup", placeholder="e.g. crew 4",
-                              on_change=_answer)
-                st.button("Send answer", icon=":material/reply:", on_click=_answer)
+            st.info(f"**{event.get('question') or 'Which crew is affected?'}**", icon=":material/help:")
+            picks = event.get("candidates") or []
+            if picks:  # several crews named: one click picks the one to replan
+                for col, n in zip(st.columns(len(picks)), picks):
+                    col.button(f"Crew {n}", key=f"pick_{n}", on_click=_run, args=(ss.received, n), width="stretch")
+            elif event.get("crew"):  # crew known, status unknown
+                b_out, b_part = st.columns(2)
+                b_out.button("Out for the day", key="manual_out", icon=":material/person_off:", width="stretch",
+                             on_click=_manual, args=(event["crew"], "crew_out"))
+                b_part.button("Short-handed (50%)", key="manual_part", icon=":material/group_remove:", width="stretch",
+                              on_click=_manual, args=(event["crew"], "crew_partial"))
             else:
-                st.caption("Understood")
-                kind_label, kind_color, kind_icon = EVENT_BADGES[event["event"]]
-                f_event, f_crew, f_cap = st.columns([1.6, 1, 1])
-                with f_event:
-                    st.caption("Event")
-                    st.badge(kind_label, icon=kind_icon, color=kind_color)
-                with f_crew:
-                    st.caption("Crew")
-                    st.markdown(f"**{event['crew']}**")
-                with f_cap:
-                    st.caption("Capacity")
-                    st.markdown(f"**{event.get('capacity', 0.0):.0%}**")
-                st.caption(describe(event))
-                if ss.noon and "plan" in ss.noon:
-                    prev = ss.noon["event"]
-                    st.caption(f":material/info: This replaces the current update (crew {prev['crew']}). "
-                               "Every replan starts from the 8 a.m. plan; one disruption is applied at a time.")
-                with st.expander("Parsed result (JSON)", expanded=False):
-                    st.json({k: v for k, v in event.items() if k != "source"})
-                c_ok, c_cancel = st.columns(2)
-                if c_ok.button("Confirm and replan", type="primary", icon=":material/check:", width="stretch"):
-                    event = {k: v for k, v in event.items() if k != "source"}  # engine gets the contract dict
-                    result = replan(data["plan_8am"], metrics, event)
-                    ss.noon = {**result, "event": event}
-                    ss.parsed = None
-                    ss.pop("view", None)
-                    st.rerun()
-                if c_cancel.button("Cancel", width="stretch"):
-                    ss.parsed = None
-                    st.rerun()
+                st.text_input("Your answer", key="followup", placeholder="e.g. crew 4", on_change=_answer)
+                st.button("Send answer", icon=":material/reply:", on_click=_answer)
 
     if ss.noon and "error" in ss.noon:
         st.error(f"Replan engine isn't available: {ss.noon['error']}")
     elif ss.noon:
         if st.button("Reset to 8 a.m. plan"):
             ss.noon = None
+            ss.applied = None
             ss.pop("view", None)
             st.rerun()
 

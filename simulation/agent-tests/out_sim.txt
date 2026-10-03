@@ -1,0 +1,44 @@
+I ran the simulation. The results are UNCALIBRATED / PLACEHOLDER GEOMETRY: you gave me no geometry or signal plan, so I invented both, and the numbers only show the direction of effect.
+
+**What I assumed**
+- **Window:** I simulated the PM peak, 16:00–18:00, which is the highest-demand period in your counts (about 1233 veh/h in total).
+- **Geometry:** a 4-leg intersection with one lane per approach, 300 m approaches and a 50 km/h speed limit.
+- **Turns:** 70% through, 15% left and 15% right on every approach. The counts have no turn data.
+- **Baseline signal:** two phases, 36 s green each, 4 s yellow and 2 s all-red, so a 90 s cycle.
+- **Bad data:** counts_current.csv has two N rows for 10:15, one of them with a count of -5. I dropped the -5 row. It falls outside the simulated window.
+
+I tested two alternatives of my own against the baseline. They are not your plans. `split_prop` keeps the 90 s cycle but gives 33 s green to N–S and 45 s to E–W, in proportion to the PM flows. `cycle60` uses a 60 s cycle with 24 s green each.
+
+**Results**, 5 seeds per scenario, with the spread over seeds in brackets:
+
+```
+scenario    | seeds | mean_delay_s  | max_queue_veh | throughput_veh_h | vs_baseline_%
+baseline    | 5     | 58.0 (±10.3)  | 31.2 (±3.6)   | 1251 (±20)       |   0.0
+split_prop  | 5     | 40.6 (±3.5)   | 26.4 (±7.1)   | 1251 (±20)       | -30.0
+cycle60     | 5     | 55.7 (±13.4)  | 28.0 (±3.8)   | 1251 (±20)       |  -4.0
+```
+
+- **Delay change:** the vs_baseline_% column is the change in mean delay, so negative means less delay.
+- **split_prop:** the 30% delay drop is large compared with the spread between seeds.
+- **cycle60:** the 4% drop is within the noise.
+- **Throughput:** it is identical in all three because every vehicle cleared the network. It shows demand served, not capacity, so only delay and queue separate the scenarios.
+
+**What I could not verify**
+- I did not calibrate or validate the model. You have no measured delay, queue or headway data, so I can't give error per metric, and I used default SUMO driver parameters.
+- I did not use counts_baseline.csv as a check. It is a different condition, not held-out data for this model.
+- I did not run the AM peak or off-peak periods.
+- Simulation shows direction of effect, not safety or approval.
+
+If you can send lane counts, approach lengths, speed and the real signal plan, I can rebuild the model with those and calibrate it.
+
+Everything is in sim/, and I confirmed the main files are non-empty:
+- report.md
+- results.csv
+- results_by_seed.csv
+- net.net.xml
+- routes.rou.xml
+- baseline.sumocfg, split_prop.sumocfg and cycle60.sumocfg
+- the three tls_*.add.xml signal files
+- build.py and run.py, which rebuild and re-run everything
+
+session_id: 20261001_233824_f06367

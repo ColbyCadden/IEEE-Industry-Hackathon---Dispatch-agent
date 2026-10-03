@@ -1,0 +1,4 @@
+scenario,seeds,mean_delay_s,delay_sd,max_queue_veh,queue_sd,throughput_veh_h,tp_sd,still_in_net,vs_baseline_pct
+baseline,5,58.0,10.3,31.2,3.6,1251,20.4,0,0.0
+split_prop,5,40.6,3.5,26.4,7.1,1251,20.4,0,-30.0
+cycle60,5,55.7,13.4,28,3.8,1251,20.4,0,-4.0

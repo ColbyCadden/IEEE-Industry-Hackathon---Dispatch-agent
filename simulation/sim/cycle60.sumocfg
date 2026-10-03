@@ -1,0 +1,3 @@
+<configuration><input><net-file value="net.net.xml"/><route-files value="routes.rou.xml"/>
+<additional-files value="tls_cycle60.add.xml"/></input><time><begin value="0"/><end value="8100"/></time>
+<processing><time-to-teleport value="-1"/></processing></configuration>

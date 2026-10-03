@@ -1,0 +1,43 @@
+---
+
+**NEED:** Open traffic count datasets or intersection video for Calgary/Alberta with clear public license terms.
+
+**CRITERIA:**
+1. Publicly accessible (no registration/paywall)
+2. Clear license (permissive, commercial OK, attribution required)
+3. Machine-readable format (Excel, CSV, API, or video files)
+4. Alberta-specific or Calgary-wide coverage
+5. Usable for research, ML, planning
+
+**RECOMMENDATION:** City of Calgary's **CalTRACS** (Calgary Traffic Counts System) — decades of intersection and segment traffic counts (40+ years, back to 1971), free download as Excel/PDF, under Open Government Licence – City of Calgary (permissive: copy, modify, redistribute for any lawful purpose with attribution).
+
+---
+
+**RANKED SHORTLIST**
+
+1. **CalTRACS** — Calgary intersection turning movement counts, segment volumes, speeds, vehicle classification
+   - Signals: City-owned, explicitly licensed under Open Government Licence – City of Calgary (permissive, worldwide, perpetual, non-exclusive, commercial OK), downloadable Excel/PDF, permanent monitoring stations + manual counts, 40+ years history, correlated datasets (bike/pedestrian/truck data also available)
+   - Watch out: City of Calgary roads only; provincial highways excluded (Alberta Transportation data separate)
+   - Source: https://trafficcounts.calgary.ca/ and https://data.calgary.ca/Transportation-Transit/Traffic-Volumes-for-2024/cauu-7hnw
+
+2. **Alberta Transportation Highway Traffic Counts** — Provincial highways and 2,700 highway intersections statewide
+   - Signals: Open Government Licence – Alberta, 390+ permanent automated recorder sites, turning movement counts, AADT data (annual), downloadable Excel
+   - Watch out: Provincial highways only; does not cover city streets; video logs mentioned but access/format not detailed
+   - Source: https://www.alberta.ca/highway-traffic-counts and https://open.alberta.ca/dataset?tags=traffic+counts
+
+3. **Open Calgary Data Portal** — Aggregated datasets (2018–2024 traffic volumes, Socrata-backed)
+   - Signals: Tabular data, OData endpoints (Excel/Tableau connectors), public domain, no paywall
+   - Watch out: Not real-time; lags ~1 year behind collection; video not available
+   - Source: https://data.calgary.ca/Transportation-Transit/
+
+---
+
+**REJECTED**
+- Alberta video logs (mentioned but no access or format documentation found; unverified availability)
+
+**METHOD NOTES:**
+- Searches: "Calgary traffic counts dataset licence", "open data traffic intersection Alberta", "traffic video dataset Canada"
+- License terms verified directly from City of Calgary Open Government Licence (permissive, includes attribution requirement, as-is warranty exclusion)
+- Video footage unconfirmed: Alberta Transportation documents mention "digital video log of provincial highways" but no public download link or license terms located; requires direct inquiry to Alberta Transportation
+
+session_id: 20261001_233825_6d6193

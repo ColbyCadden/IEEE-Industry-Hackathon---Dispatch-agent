@@ -1,0 +1,375 @@
+CALGARY TRAFFIC DATA SOURCES - VERIFICATION REPORT
+===================================================
+
+EXECUTIVE SUMMARY
+-----------------
+Verified 5 real traffic data sources for Calgary, Alberta with actual HTTP requests
+and data samples. Result: NO FREE real-time per-road-segment speed/congestion feed exists.
+Best alternatives are incident-based feeds (free) + paid APIs for speeds.
+
+TESTED SOURCES (HTTP 200 / Reachable)
+=====================================
+
+1. CALGARY TRAFFIC INCIDENTS ARCHIVE (Socrata)
+   URL: https://data.calgary.ca/Transportation-Transit/Traffic-Incidents/35ra-9556
+   API: https://data.calgary.ca/api/views/35ra-9556/rows.json
+   Resource ID: 35ra-9556
+   HTTP Status: 200 OK (verified 2026-10-02 15:34 UTC)
+   
+   Data Format:
+   - Incident location (latitude/longitude, WKT POINT geometry)
+   - Incident type and description
+   - Start and modification timestamps (UTC, floating point)
+   - Quadrant (NE/NW/SE/SW)
+   - Lane impact info
+   
+   Sample Record:
+     Location: "52 Street and Mahogany Street SE"
+     Type: "Traffic incident. Blocking the NB right lane"
+     Lon: -113.9429748, Lat: 50.89667926
+     Start: 2024-09-19T02:57:00, Modified: 2024-09-19T02:59:00
+     Geometry: POINT (-113.9429748 50.89667926)
+   
+   Update Frequency: Every 10 minutes (append-only archive)
+   Total Records: 64,800+ historical incidents
+   Cost: Free
+   
+   Fields:
+   - INCIDENT_INFO (string)
+   - DESCRIPTION (string)
+   - START_DT_UTC (floating timestamp)
+   - MODIFIED_DT_UTC (floating timestamp)
+   - QUADRANT (text: NE, NW, SE, SW)
+   - Longitude (decimal)
+   - Latitude (decimal)
+   - Count (text)
+   - Point (WKT format: POINT(lon lat))
+   - id (unique row identifier)
+   - :created_at, :updated_at (Socrata metadata)
+   
+   Licence: Open Government Licence - City of Calgary v2.1
+   Attribution Required: "The City of Calgary"
+   Source Link: https://www.calgary.ca/transportation/roads/traffic/advisories-closures-and-detours/calgary-traffic-report.html
+   
+   Use Cases:
+   - Historical incident analysis
+   - Incident location mapping
+   - Lane closure tracking
+   - Traffic safety research
+   
+   Limitations:
+   - No real-time speed or volume data
+   - Incident type inference only (does not indicate actual congestion)
+   - ~10 minute update lag
+
+
+2. CALGARY CURRENT TRAFFIC INCIDENTS (Socrata Real-time)
+   URL: https://data.calgary.ca/Transportation-Transit/Current-Traffic-Incidents/4jah-h97u
+   API: https://data.calgary.ca/api/views/4jah-h97u/rows.json
+   Resource ID: 4jah-h97u
+   HTTP Status: 200 OK (verified 2026-10-02 15:34 UTC)
+   
+   Data Format: Same as archive dataset but contains only current active incidents
+   Update Frequency: Every 10 minutes
+   Typical Rows: 1-30 active incidents at any time
+   Cost: Free
+   
+   Licence: Open Government Licence - City of Calgary v2.1
+   Attribution Required: "The City of Calgary"
+   
+   Use Cases:
+   - Real-time incident monitoring
+   - Current traffic alerts
+   - Incident-based congestion estimation
+   
+   Limitations:
+   - No speed/volume data
+   - ~10 minute delay from event occurrence
+
+
+3. CALGARY TRAFFIC CAMERAS
+   URL: https://data.calgary.ca/Transportation-Transit/Traffic-Cameras/k7p9-kppz
+   API: https://data.calgary.ca/api/views/k7p9-kppz/rows.json
+   Resource ID: k7p9-kppz
+   HTTP Status: 200 OK (verified 2026-10-02 15:34 UTC)
+   
+   Data Format:
+   - Camera locations (lat/lon, WKT geometry)
+   - Camera name and monitored roadway
+   - Links to live camera feed images
+   
+   Update Frequency: Static locations, live images update continuously
+   Cost: Free
+   
+   Fields:
+   - Camera_Id (identifier)
+   - Camera_Name (string)
+   - Road_Name (string)
+   - Direction (string: N, S, E, W)
+   - Latitude (decimal)
+   - Longitude (decimal)
+   - Point (WKT POINT)
+   - Image_URL (hyperlink to JPEG/stream)
+   
+   Licence: Open Government Licence - City of Calgary v2.1
+   Attribution Required: "The City of Calgary"
+   
+   Use Cases:
+   - Visual traffic condition assessment
+   - Camera location reference
+   - Real-time qualitative monitoring (manual)
+   
+   Limitations:
+   - Visual only - requires manual interpretation
+   - Not suitable for automated congestion detection
+   - Limited spatial coverage (major routes + key intersections only)
+
+
+4. ALBERTA 511 EVENTS API
+   URL: https://511.alberta.ca
+   API Documentation: https://511.alberta.ca/developers/doc
+   Event Endpoint: https://511.alberta.ca/api/v2/get/event
+   Registration URL: https://511.alberta.ca/my511/register
+   HTTP Status: Reachable (returns "Invalid Key" without credentials)
+   
+   API Key Status: FREE (registration required, no payment)
+   Throttling: 10 calls per 60 seconds (per IP)
+   Format: JSON or XML
+   Language: English or French
+   
+   Data Format:
+   - Traffic events (incidents, construction, closures, special events)
+   - Spatial: Latitude/Longitude + optional secondary coords, polyline
+   - Temporal: Unix timestamps (Reported, LastUpdated, StartDate, PlannedEndDate)
+   - Operational: Lanes affected, severity, event type/subtype, restrictions
+   
+   Sample Response Fields:
+   {
+     "ID": 58,
+     "SourceId": "4841",
+     "Organization": "ERS",  // Event source (ERS, RCMP, CPS, etc.)
+     "RoadwayName": "Premier Way",
+     "DirectionOfTravel": "West",  // Unknown, All Directions, N/S/E/W, etc.
+     "Description": "Parade on Premier Way Westbound from Pitt Ave SW...",
+     "Reported": 1697738820,  // Unix timestamp
+     "LastUpdated": 1697220531,
+     "StartDate": 1697738820,
+     "PlannedEndDate": 1697743800,
+     "LanesAffected": "No Data",
+     "Latitude": 51.0255326069246,
+     "Longitude": -114.08658917176,
+     "LatitudeSecondary": 51.0263666029486,  // Optional second location
+     "LongitudeSecondary": -114.091570338812,
+     "EventType": "specialEvents",  // roadwork, closures, accidentsAndIncidents, specialEvents, generalInfo
+     "EventSubType": "parade",
+     "IsFullClosure": false,
+     "Severity": "None",  // Unknown, Minor, Major
+     "EncodedPolyline": "q|lvHdpiwT?JCrCOfBkA|K?X@L?^GJIDI\\m@dE",  // Google polyline format
+     "Restrictions": {
+       "Width": null,  // Feet
+       "Height": null,  // Feet
+       "Length": null,  // Feet
+       "Weight": null,  // Tons
+       "Speed": null   // MPH
+     },
+     "DetourPolyline": "",
+     "DetourInstructions": "",
+     "Recurrence": "<b>Thu:</b><br/>Active 24 hours a day<br/><br/>",
+     "RecurrenceSchedules": [...],
+     "Details": ""
+   }
+   
+   Coverage: All of Alberta (includes Calgary, surrounding areas, highways)
+   Update Frequency: Real-time (seconds to minutes)
+   Cost: Free (registration only)
+   
+   Licence: Government of Alberta / Canadian Open Data
+   Attribution Required: "Alberta Transportation (511 Alberta)"
+   API Docs: https://511.alberta.ca/help/endpoint/event
+   
+   Use Cases:
+   - Real-time provincial incident feed
+   - Traffic event alerts
+   - Road closure notification
+   - Construction tracking
+   - Multi-source incident aggregation
+   
+   Limitations:
+   - Requires API key registration (free but not anonymous)
+   - Rate limited (10 calls/60 sec)
+   - No speed/volume data
+   - Covers all of Alberta (requires filtering for Calgary)
+
+
+5. OPENSTREETMAP / OVERPASS API
+   URL: https://overpass-api.de/api/interpreter
+   HTTP Status: 200 OK (requires POST with proper Content-Type header)
+   API Key: Not required
+   
+   Data Format:
+   - Static road network (ways, nodes)
+   - Tags: highway type, street name, lanes, maxspeed, surface, etc.
+   
+   Sample Query Response:
+   - Way ID: OSM-assigned numeric identifier
+   - Tags: name="52 Street", highway="primary", lanes=2, maxspeed=60
+   - Coordinates: Ordered list of lat/lon points forming the way
+   
+   Update Frequency: OSM community-contributed (Overpass mirrors ~nightly)
+   Cost: Free
+   
+   Licence: ODbL 1.0 (Open Data Commons Open Database License)
+   Attribution Required: "© OpenStreetMap contributors"
+   
+   Use Cases:
+   - Road network basemap
+   - Street names and routing
+   - Speed limit reference (where tagged by community)
+   - Road hierarchy (motorway, trunk, primary, secondary, residential, etc.)
+   
+   Limitations:
+   - NO REAL-TIME TRAFFIC DATA
+   - Static network geometry only
+   - No speed/volume/incident data
+   - Community-contributed quality varies
+   - Requires careful query construction (bounding boxes, tag filters)
+
+
+TRAFFIC VOLUME / FLOW DATASETS
+===============================
+
+Searched for traffic volume, flow, or count datasets on Calgary Open Data:
+Result: NONE FOUND
+
+Conclusion: Calgary's open data does not include real-time or historical
+traffic volume metrics on a per-segment basis.
+
+
+REAL-TIME SPEED/CONGESTION DATA
+================================
+
+Conclusion: NO FREE REAL-TIME per-road-segment speed or congestion data
+feed exists for Calgary, Alberta.
+
+Paid Alternatives (NOT FREE):
+1. Google Maps API - Real-time traffic layer, requires API key + paid plan
+2. TomTom API - Real-time speed/flow, requires API key + paid plan
+3. HERE Technologies - Real-time incidents + speeds, requires API key + paid plan
+4. Mapbox Traffic API - Real-time traffic flow, requires API key + paid plan
+5. Waze Connected Citizens Program - Crowdsourced speeds (partner agreement required)
+
+
+LICENCE & ATTRIBUTION SUMMARY
+=============================
+
+CALGARY OPEN DATA (Socrata):
+- Licence Name: Open Government Licence - City of Calgary v2.1
+- Licence URL: https://data.calgary.ca/stories/s/Open-Calgary-Terms-of-Use/u45n-7awa/
+- Attribution Required: "The City of Calgary"
+- Commercial Use: YES (allowed under licence)
+- Modification: YES (allowed)
+- Redistribution: YES (with attribution)
+- Terms: Worldwide, royalty-free, perpetual, non-exclusive license
+
+ALBERTA 511:
+- Licence: Government of Alberta / Canadian Open Data
+- Attribution Required: "Alberta Transportation (511 Alberta)"
+- API Key: Free registration (https://511.alberta.ca/my511/register)
+- Throttling: 10 calls per 60 seconds
+
+OPENSTREETMAP:
+- Licence: ODbL 1.0 (Open Data Commons Open Database License)
+- Attribution Required: "© OpenStreetMap contributors"
+- Database Rights: Licensed under ODbL
+- Copyrighted Maps: May have additional requirements
+
+
+INTEGRATION RECOMMENDATIONS
+=============================
+
+1. Use Calgary Incidents API (35ra-9556) for:
+   - Historical incident analysis (>64k records)
+   - Incident location mapping
+   - Lane closure tracking
+   
+2. Use Alberta 511 API for:
+   - Real-time incident feed (all Alberta)
+   - Multi-source aggregation (ERS, RCMP, CPS)
+   - Broader context (beyond Calgary city limits)
+   
+3. Use Traffic Cameras for:
+   - Visual reference points
+   - Qualitative assessment of key intersections
+   
+4. Use OpenStreetMap for:
+   - Road network basemap
+   - Street names and geometry
+   - Speed limit reference
+
+5. For Speed/Congestion:
+   - If budget allows: Google Maps API, TomTom, or HERE
+   - If no budget: Infer from incident types + historical patterns
+   - Alternative: Waze data (partner agreement)
+
+
+POLLING STRATEGY FOR LIVE MONITORING
+====================================
+
+Incident-Based Approach (Free):
+- Calgary API: Poll every 10 minutes (matches update frequency)
+- Alberta 511: Poll every 2-5 minutes for early event detection
+- Combine results using lat/lon bounding box to identify Calgary events
+- Correlate with historical incident patterns to estimate congestion
+
+Expected Data Freshness:
+- Calgary Incidents: ~10 minutes
+- Alberta 511: ~2-5 minutes
+- Cameras: Real-time images (visual only)
+
+
+FILE OUTPUT
+===========
+
+Full JSON documentation written to:
+  calgary3d/data/sources_verified.json
+
+Contents:
+- sources[] array with 5 verified data sources
+- Each source includes:
+  * HTTP status (actual tested response)
+  * Exact endpoint URLs
+  * Socrata resource IDs / API paths
+  * Complete field lists
+  * Sample data (real records)
+  * Update frequency and lag
+  * Licence, attribution, terms of use
+  * Use cases and limitations
+  
+- live_congestion_feed_free: false
+- free_realtime_speed_data_available: false
+- Commercial alternatives noted with costs
+- Integration and polling recommendations
+
+
+NEXT STEPS
+==========
+
+If speed data is required:
+1. Contact City of Calgary Transportation for internal sensors (not public)
+2. Evaluate Google Maps API, TomTom, HERE for paid access
+3. Explore Waze Connected Citizens for crowdsourced data
+4. Build interpolated congestion model from:
+   - Incident types + frequencies
+   - Historical traffic patterns (time-of-day, day-of-week)
+   - Camera visual assessment (manual)
+
+If incident-based monitoring is sufficient:
+1. Implement Calgary API poller (10 min interval)
+2. Add Alberta 511 API with free registration
+3. Build incident-to-congestion inference rules
+4. Publish alerts based on incident type/location/severity
+
+
+---
+Report Generated: 2026-10-02
+Verified by: HTTP fetch + actual data sampling

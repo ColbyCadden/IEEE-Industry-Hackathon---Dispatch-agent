@@ -14,7 +14,7 @@ key never reaches the browser).
 
     python -m agents.dispatch.calls "debris at 728 6 street southwest was picked up"
 """
-import csv, os, subprocess, sys, threading
+import csv, json, os, subprocess, sys, threading
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ROOT = os.path.dirname(HERE)
@@ -59,6 +59,112 @@ def replan(blocking=False):
     t = threading.Thread(target=run, daemon=True)
     t.start()
     return t
+
+
+# ---------------------------------------------------------------------------
+# Voice call: the agent drives a short interview, then applies the update.
+# Limited ElevenLabs keys cannot create ConvAI agents or transcribe audio, so the
+# dialogue logic lives here; the browser supplies speech in, the server speaks the
+# agent's lines with ElevenLabs. Swap in a ConvAI agent once the key has
+# convai_write + speech_to_text.
+# ---------------------------------------------------------------------------
+CATEGORIES = ("pothole", "debris", "sign", "signal", "dead_animal",
+              "road_maintenance", "markings")
+OPEN_Q = {
+    "debris": "Is the debris still on the road, or has it been picked up?",
+    "pothole": "Has the pothole been filled, or is it still there?",
+    "sign": "Has the sign been repaired, or is it still damaged?",
+    "signal": "Has the traffic light been repaired, or is it still broken?",
+    "dead_animal": "Has the animal been removed, or is it still there?",
+    "road_maintenance": "Has that work been finished, or is it still outstanding?",
+    "markings": "Have the markings been repainted, or are they still faded?",
+}
+FOLLOWUPS = [
+    ("escalate", "Thanks. How urgent is it? Is anyone in danger, or is it blocking traffic?"),
+    ("resolved", "Got it. Anything else about that location I should know before I close it?"),
+]
+
+
+def _open_now():
+    st = U.state()
+    return [r for r in area_requests() if effective_status(r, st).lower().startswith(("open", "overdue"))]
+
+
+def next_question(call_id, utterance=None, request_id=None, action=None):
+    """Advance the call by one turn. Returns the agent's next question + state.
+
+    Phases: asking_location -> asking_status -> (asking_urgency) -> done -> wrap.
+    Caller may skip phase 1 by passing request_id (UI candidate buttons, or a
+    dispatch map popup), and phase 2 by passing action.
+    """
+    sess = SESSIONS.setdefault(call_id, {"phase": "location", "id": None, "action": None})
+
+    def say(state, question, **kw):
+        sess["phase"] = state
+        r = {"call_id": call_id, "state": state, "question": question}
+        r.update(kw)
+        return r
+
+    # ---- phase: identify the issue -------------------------------------
+    if sess["phase"] == "location":
+        if request_id:                       # caller/UI picked it
+            sess["id"] = request_id
+        elif utterance:
+            best, ranked = U.match_request(utterance, _open_now())
+            if not best and ranked:
+                sess["pending"] = ranked[0][1]["id"]
+                return say("confirm", "I found a few that could match. Which one did you mean?",
+                           candidates=[{"id": c["id"], "category": c["category"],
+                                        "location": c["location"] or c["community"]}
+                                       for _, c in ranked], awaiting="candidate")
+            if best:
+                sess["id"] = best["id"]
+        if not sess["id"]:
+            return say("location", "Which issue are you calling about? Tell me the street "
+                                  "and what the problem is.", awaiting="location",
+                       open_count=len(_open_now()))
+        req = next((r for r in _open_now() if r["id"] == sess["id"]), {})
+        cat = req.get("category", "")
+        sess["cat"] = cat
+        loc = req.get("location") or req.get("community") or "your location"
+        sess["action"] = action or U.classify(utterance or "")
+        return say("status", "Thanks, I've got the %s at %s. " % (cat.replace("_", " "), loc)
+                   + OPEN_Q.get(cat, "What's the current status of that issue?"),
+                   awaiting="status", request={"id": sess["id"], "category": cat, "location": loc})
+
+    # ---- phase: status of that issue ------------------------------------
+    if sess["phase"] in ("status", "clarify"):
+        a2 = action or U.classify(utterance or "")
+        if not a2:
+            return say("clarify", "Sorry, I didn't catch that. Was it fixed, still there, "
+                                  "or more urgent than before?", awaiting="status")
+        sess["action"] = a2
+        if a2 == "escalate":
+            return say("urgency", FOLLOWUPS[0][1], awaiting="urgency", action=a2)
+        res = handle_call(utterance or "", caller=sess.get("caller", "voice"),
+                          request_id=sess["id"], action=a2, replan_now=True)
+        sess["result"] = res
+        return say("done", res.get("reply", ""), result=res, awaiting=None)
+
+    # ---- phase: urgency detail -----------------------------------------
+    if sess["phase"] == "urgency":
+        note = (utterance or "")[:200]
+        res = handle_call(note or "escalated", caller=sess.get("caller", "voice"),
+                          request_id=sess["id"], action="escalate", replan_now=True)
+        if res.get("applied") and note:
+            allu = U.load()
+            allu[-1]["note"] = note
+            with open(U.LOG, "w", encoding="utf-8") as fh:
+                fh.write("\n".join(json.dumps(x) for x in allu) + "\n")
+        sess["result"] = res
+        return say("done", res.get("reply", ""), result=res, awaiting=None)
+
+    # ---- finished -------------------------------------------------------
+    return say("wrap", "Thanks, that's logged. Anything else I can help with?", awaiting=None)
+
+
+SESSIONS = {}
+CALLS_JSON = os.path.join(DATA, "calls.json")
 
 
 def handle_call(transcript, caller="caller", request_id=None, action=None, replan_now=True):

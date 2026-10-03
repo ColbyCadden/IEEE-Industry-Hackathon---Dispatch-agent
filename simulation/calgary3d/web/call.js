@@ -46,7 +46,15 @@ function ui() {
   box.innerHTML = `<div class="ag">\u{1F3A7} Dispatch agent${st.listening ? ' (listening...)' : ''}</div>
     <div>${st.lastQ}</div>${cands}
     <div class="you">${st.lastA ? 'You: ' + st.lastA : ''}</div>
-    <div class="mic">${SR ? 'Mic on: speak your answer' : 'Speech input needs Chrome or Edge - type your answer below'}</div>`;
+    <div class="mic">${SR ? (st.denied ? 'Mic blocked by the browser - type instead' : 'Mic on: speak your answer')
+                            : 'Speech input needs Chrome or Edge - type instead'}</div>
+    <div class="dp-row" style="margin-top:5px"><input type="text" id="dp-ans" placeholder="or type your answer here">
+      <button class="dp-btn" id="dp-ansgo">Send</button></div>`;
+  const ans = $('dp-ans'), go = $('dp-ansgo');
+  if (ans) {
+    go.onclick = () => { const v = ans.value.trim(); if (v) { st.lastA = v; ui(); turn({ utterance: v }); } };
+    ans.onkeydown = e => { if (e.key === 'Enter') { e.stopPropagation(); go.onclick(); } };
+  }
   box.querySelectorAll('[data-cand]').forEach(b => b.onclick = () => {
     const c = st.cand[+b.dataset.cand];
     b.blur();
@@ -84,13 +92,20 @@ async function turn(payload) {
 }
 
 function listen() {
-  if (!SR || !st.on || st.speaking) return;
+  if (!SR || !st.on || st.speaking || st.denied) return;
   stop();
   st.recog = new SR();
   st.recog.lang = 'en-CA'; st.recog.interimResults = false; st.recog.continuous = false;
   st.recog.onstart = () => { st.listening = true; ui(); };
   st.recog.onend = () => { st.listening = false; ui(); };
-  st.recog.onerror = e => { st.lastQ = 'Mic error: ' + e.error + '. Type your answer instead.'; ui(); };
+  st.recog.onerror = e => {
+    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+      st.denied = true;
+      st.lastQ = 'Microphone permission was blocked. Allow the mic in the address bar, '
+               + 'or just type your answer below.';
+    } else st.lastQ = 'Mic error (' + e.error + '). Type your answer below.';
+    st.listening = false; ui();
+  };
   st.recog.onresult = e => {
     const t = e.results[0][0].transcript.trim();
     if (t) { st.lastA = t; ui(); turn({ utterance: t }); }
@@ -127,9 +142,27 @@ function attachCall({ button }) {
   };
 }
 
-/* dispatch.js builds the panel in a separate module; wait for it. */
-(function boot() {
-  if ($('dp-body')) return attachCall({ button: 'dp-call' });
-  const t = setInterval(() => { if ($('dp-body')) { clearInterval(t); attachCall({ button: 'dp-call' }); } }, 250);
-  setTimeout(() => clearInterval(t), 30000);
-})();
+/* dispatch.js builds the panel in a separate module (and needs three.js from the
+ * CDN to load first), so wait for it - but never fail silently. */
+window.addEventListener('error', e => showFatal('JS error: ' + e.message));
+function showFatal(msg) {
+  const box = $('dp-body') || document.body;
+  const d = document.createElement('div');
+  d.id = 'dp-live'; d.className = '';
+  d.style.cssText = 'margin-top:8px;padding:8px;border-radius:8px;background:rgba(234,67,53,.25)';
+  d.innerHTML = '<b>Dispatch call unavailable</b><div>' + msg + '</div>';
+  if (!document.getElementById('dp-live')) box.appendChild(d);
+}
+function boot() {
+  if ($('dp-body') && !document.getElementById('dp-call')) return attachCall({ button: 'dp-call' });
+  const t = setInterval(() => {
+    if ($('dp-body') && !document.getElementById('dp-call')) { clearInterval(t); attachCall({ button: 'dp-call' }); }
+  }, 250);
+  setTimeout(() => {
+    clearInterval(t);
+    if (!document.getElementById('dp-call'))
+      showFatal('The dispatch panel did not load. three.js comes from unpkg.com - '
+              + 'if this machine is offline or blocking the CDN, the panel never appears.');
+  }, 20000);
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();

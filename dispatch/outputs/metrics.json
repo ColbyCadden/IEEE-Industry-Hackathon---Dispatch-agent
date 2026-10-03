@@ -1,0 +1,98 @@
+{
+  "8am": {
+    "P": 125.75,
+    "safety": 30,
+    "n": 40
+  },
+  "fifo": {
+    "P": 99.0,
+    "safety": 16,
+    "n": 40
+  },
+  "noon": {
+    "P": 112.75,
+    "safety": 30,
+    "n": 35,
+    "moved": 2,
+    "dropped": 5,
+    "safety_dropped": 0
+  },
+  "changes": {
+    "moved": [
+      {
+        "id": "26-00654470",
+        "from": 4,
+        "to": 5
+      },
+      {
+        "id": "26-00655098",
+        "from": 4,
+        "to": 5
+      }
+    ],
+    "dropped": [
+      "26-00653375",
+      "26-00651966",
+      "26-00654890",
+      "26-00648442",
+      "26-00652057"
+    ],
+    "dropped_jobs": [
+      {
+        "id": "26-00653375",
+        "type": "Debris",
+        "service_name": "Roads - Debris on Street/Sidewalk/Boulevard",
+        "community": "SILVERADO",
+        "P": 2.75,
+        "safety": false,
+        "lat": 50.88298604108047,
+        "lon": -114.07129694074862,
+        "reports": 2
+      },
+      {
+        "id": "26-00651966",
+        "type": "Debris",
+        "service_name": "Roads - Debris on Street/Sidewalk/Boulevard",
+        "community": "SUNNYSIDE",
+        "P": 2.75,
+        "safety": false,
+        "lat": 51.05641953428092,
+        "lon": -114.07902910746358,
+        "reports": 2
+      },
+      {
+        "id": "26-00654890",
+        "type": "Traffic sign",
+        "service_name": "Roads - Signs - Traffic and Roadmarking",
+        "community": "HOTCHKISS",
+        "P": 2.75,
+        "safety": false,
+        "lat": 50.91419352023465,
+        "lon": -113.89624948761448,
+        "reports": 2
+      },
+      {
+        "id": "26-00648442",
+        "type": "Traffic sign",
+        "service_name": "Roads - Signs - Traffic and Roadmarking",
+        "community": "BRIDGELAND/RIVERSIDE",
+        "P": 2.5,
+        "safety": false,
+        "lat": 51.05055069499901,
+        "lon": -114.03507983816613,
+        "reports": 1
+      },
+      {
+        "id": "26-00652057",
+        "type": "Debris",
+        "service_name": "Roads - Debris on Street/Sidewalk/Boulevard",
+        "community": "MCCALL",
+        "P": 2.25,
+        "safety": false,
+        "lat": 51.088997572302425,
+        "lon": -114.02708650389776,
+        "reports": 1
+      }
+    ]
+  }
+}

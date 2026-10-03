@@ -87,25 +87,7 @@ if __name__ == "__main__":
     from dispatch.data_prep import load_clean_tickets
     from dispatch.scoring import score
 
-    try:
-        scored = score(load_clean_tickets())
-    except ImportError:
-        # TEMPORARY test table: weights.py is still a placeholder. Not the real table.
-        print("(weights.py not ready - using temporary test weights)")
-        tmp_weights = {
-            "Roads - Pothole Maintenance": 3,
-            "Roads - Signs - Missing - Damaged": 3,
-            "Roads - Signs - Traffic and Roadmarking": 3,
-            "Roads - Debris on Street/Sidewalk/Boulevard": 2,
-            "Roads - Signs - Parking": 1,
-            "WRS - Waste - Residential": 1,
-            "WRS - Commercial Collection Services": 1,
-            "WRS - New Service - Carts": 1,
-        }
-        tmp_safety = set(list(tmp_weights)[:4])
-        tmp_short = {name: name.split(" - ", 1)[-1] for name in tmp_weights}
-        scored = score(load_clean_tickets(), weights=tmp_weights,
-                       safety_types=tmp_safety, short_names=tmp_short)
+    scored = score(load_clean_tickets())
 
     for order in ("priority", "fifo"):
         plan = make_plan(scored, order=order)

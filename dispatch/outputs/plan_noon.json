@@ -1,0 +1,468 @@
+{
+  "crews": [
+    {
+      "crew": 1,
+      "zone": "E",
+      "centroid": [
+        51.054883,
+        -114.009292
+      ],
+      "jobs": [
+        {
+          "id": "26-00652093",
+          "type": "Damaged sign",
+          "service_name": "Roads - Signs - Missing - Damaged",
+          "community": "INGLEWOOD",
+          "P": 3.75,
+          "safety": true,
+          "lat": 51.03414052413669,
+          "lon": -114.01912581291118,
+          "reports": 2
+        },
+        {
+          "id": "26-00654459",
+          "type": "Pothole",
+          "service_name": "Roads - Pothole Maintenance",
+          "community": "MARLBOROUGH",
+          "P": 3.75,
+          "safety": true,
+          "lat": 51.05954612270691,
+          "lon": -113.96997429032228,
+          "reports": 2
+        },
+        {
+          "id": "26-00652193",
+          "type": "Damaged sign",
+          "service_name": "Roads - Signs - Missing - Damaged",
+          "community": "MAYLAND HEIGHTS",
+          "P": 3.25,
+          "safety": true,
+          "lat": 51.06083218163849,
+          "lon": -114.01331127596195,
+          "reports": 1
+        },
+        {
+          "id": "26-00652760",
+          "type": "Pothole",
+          "service_name": "Roads - Pothole Maintenance",
+          "community": "ALYTH/BONNYBROOK",
+          "P": 3.25,
+          "safety": true,
+          "lat": 51.02285696668069,
+          "lon": -114.02248247207032,
+          "reports": 1
+        },
+        {
+          "id": "26-00653629",
+          "type": "Pothole",
+          "service_name": "Roads - Pothole Maintenance",
+          "community": "FRANKLIN",
+          "P": 3.25,
+          "safety": true,
+          "lat": 51.05893200830186,
+          "lon": -113.98749539255644,
+          "reports": 1
+        }
+      ]
+    },
+    {
+      "crew": 2,
+      "zone": "NW",
+      "centroid": [
+        51.118207,
+        -114.275243
+      ],
+      "jobs": [
+        {
+          "id": "26-00655213",
+          "type": "Pothole",
+          "service_name": "Roads - Pothole Maintenance",
+          "community": "SIGNAL HILL",
+          "P": 3.25,
+          "safety": true,
+          "lat": 51.02326017192605,
+          "lon": -114.17990702915992,
+          "reports": 1
+        },
+        {
+          "id": "26-00651513",
+          "type": "Traffic sign",
+          "service_name": "Roads - Signs - Traffic and Roadmarking",
+          "community": "TUSCANY",
+          "P": 3.0,
+          "safety": false,
+          "lat": 51.12191108825487,
+          "lon": -114.2408862053562,
+          "reports": 2
+        },
+        {
+          "id": "26-00651958",
+          "type": "Debris",
+          "service_name": "Roads - Debris on Street/Sidewalk/Boulevard",
+          "community": "GLAMORGAN",
+          "P": 2.25,
+          "safety": false,
+          "lat": 51.015116804134095,
+          "lon": -114.15322733578051,
+          "reports": 1
+        },
+        {
+          "id": "26-00652635",
+          "type": "Debris",
+          "service_name": "Roads - Debris on Street/Sidewalk/Boulevard",
+          "community": "CITADEL",
+          "P": 2.25,
+          "safety": false,
+          "lat": 51.14453732608978,
+          "lon": -114.18391232300922,
+          "reports": 1
+        },
+        {
+          "id": "26-00653222",
+          "type": "Debris",
+          "service_name": "Roads - Debris on Street/Sidewalk/Boulevard",
+          "community": "RICHMOND",
+          "P": 2.25,
+          "safety": false,
+          "lat": 51.02971029545911,
+          "lon": -114.11842028929551,
+          "reports": 1
+        }
+      ]
+    },
+    {
+      "crew": 3,
+      "zone": "W",
+      "centroid": [
+        51.041915,
+        -114.146808
+      ],
+      "jobs": [
+        {
+          "id": "26-00652152",
+          "type": "Pothole",
+          "service_name": "Roads - Pothole Maintenance",
+          "community": "SCARBORO/SUNALTA WEST",
+          "P": 3.25,
+          "safety": true,
+          "lat": 51.04219909319587,
+          "lon": -114.11485990934284,
+          "reports": 1
+        },
+        {
+          "id": "26-00652611",
+          "type": "Pothole",
+          "service_name": "Roads - Pothole Maintenance",
+          "community": "SHAGANAPPI",
+          "P": 3.25,
+          "safety": true,
+          "lat": 51.04521146641257,
+          "lon": -114.1266528552515,
+          "reports": 1
+        },
+        {
+          "id": "26-00653866",
+          "type": "Pothole",
+          "service_name": "Roads - Pothole Maintenance",
+          "community": "KILLARNEY/GLENGARRY",
+          "P": 3.25,
+          "safety": true,
+          "lat": 51.030131956517685,
+          "lon": -114.13173134426395,
+          "reports": 1
+        },
+        {
+          "id": "26-00653868",
+          "type": "Pothole",
+          "service_name": "Roads - Pothole Maintenance",
+          "community": "GLENDALE",
+          "P": 3.25,
+          "safety": true,
+          "lat": 51.03337139240085,
+          "lon": -114.15271889005814,
+          "reports": 1
+        },
+        {
+          "id": "26-00654670",
+          "type": "Damaged sign",
+          "service_name": "Roads - Signs - Missing - Damaged",
+          "community": "SOUTH CALGARY",
+          "P": 3.25,
+          "safety": true,
+          "lat": 51.02680215199665,
+          "lon": -114.10207470149076,
+          "reports": 1
+        }
+      ]
+    },
+    {
+      "crew": 4,
+      "zone": "SE",
+      "centroid": [
+        50.891711,
+        -113.940579
+      ],
+      "jobs": []
+    },
+    {
+      "crew": 5,
+      "zone": "S",
+      "centroid": [
+        50.913917,
+        -114.078054
+      ],
+      "jobs": [
+        {
+          "id": "26-00654421",
+          "type": "Damaged sign",
+          "service_name": "Roads - Signs - Missing - Damaged",
+          "community": "SOUTHWOOD",
+          "P": 3.75,
+          "safety": true,
+          "lat": 50.957758808343314,
+          "lon": -114.08319427981304,
+          "reports": 2
+        },
+        {
+          "id": "26-00652996",
+          "type": "Pothole",
+          "service_name": "Roads - Pothole Maintenance",
+          "community": "PARKLAND",
+          "P": 3.25,
+          "safety": true,
+          "lat": 50.920841901943966,
+          "lon": -114.02822405924384,
+          "reports": 1
+        },
+        {
+          "id": "26-00655606",
+          "type": "Pothole",
+          "service_name": "Roads - Pothole Maintenance",
+          "community": "MILLRISE",
+          "P": 3.25,
+          "safety": true,
+          "lat": 50.91705536774364,
+          "lon": -114.08491413864552,
+          "reports": 1
+        },
+        {
+          "id": "26-00655098",
+          "type": "Damaged sign",
+          "service_name": "Roads - Signs - Missing - Damaged",
+          "community": "RICARDO RANCH",
+          "P": 3.25,
+          "safety": true,
+          "lat": 50.85446381088668,
+          "lon": -113.9359132306416,
+          "reports": 1
+        },
+        {
+          "id": "26-00654470",
+          "type": "Pothole",
+          "service_name": "Roads - Pothole Maintenance",
+          "community": "MAHOGANY",
+          "P": 3.25,
+          "safety": true,
+          "lat": 50.89594391667445,
+          "lon": -113.92463385892704,
+          "reports": 1
+        }
+      ]
+    },
+    {
+      "crew": 6,
+      "zone": "NE",
+      "centroid": [
+        51.097651,
+        -113.937527
+      ],
+      "jobs": [
+        {
+          "id": "26-00652711",
+          "type": "Damaged sign",
+          "service_name": "Roads - Signs - Missing - Damaged",
+          "community": "09P",
+          "P": 3.25,
+          "safety": true,
+          "lat": 51.02686663627315,
+          "lon": -113.8887647551224,
+          "reports": 1
+        },
+        {
+          "id": "26-00653144",
+          "type": "Pothole",
+          "service_name": "Roads - Pothole Maintenance",
+          "community": "HUXLEY",
+          "P": 3.25,
+          "safety": true,
+          "lat": 51.055551543633726,
+          "lon": -113.9045528436838,
+          "reports": 1
+        },
+        {
+          "id": "26-00654178",
+          "type": "Damaged sign",
+          "service_name": "Roads - Signs - Missing - Damaged",
+          "community": "HORIZON",
+          "P": 3.25,
+          "safety": true,
+          "lat": 51.08990020616713,
+          "lon": -113.99169523733028,
+          "reports": 1
+        },
+        {
+          "id": "26-00654254",
+          "type": "Damaged sign",
+          "service_name": "Roads - Signs - Missing - Damaged",
+          "community": "WESTWINDS",
+          "P": 3.25,
+          "safety": true,
+          "lat": 51.10339214773552,
+          "lon": -113.97005020356406,
+          "reports": 1
+        },
+        {
+          "id": "26-00655515",
+          "type": "Damaged sign",
+          "service_name": "Roads - Signs - Missing - Damaged",
+          "community": "CORNERSTONE",
+          "P": 3.25,
+          "safety": true,
+          "lat": 51.15735996767518,
+          "lon": -113.9305705256274,
+          "reports": 1
+        }
+      ]
+    },
+    {
+      "crew": 7,
+      "zone": "N",
+      "centroid": [
+        51.151944,
+        -114.122683
+      ],
+      "jobs": [
+        {
+          "id": "26-00654961",
+          "type": "Pothole",
+          "service_name": "Roads - Pothole Maintenance",
+          "community": "HOUNSFIELD HEIGHTS/BRIAR HILL",
+          "P": 3.25,
+          "safety": true,
+          "lat": 51.06317953919688,
+          "lon": -114.10572976666074,
+          "reports": 1
+        },
+        {
+          "id": "26-00655028",
+          "type": "Pothole",
+          "service_name": "Roads - Pothole Maintenance",
+          "community": "DALHOUSIE",
+          "P": 3.25,
+          "safety": true,
+          "lat": 51.10940993799306,
+          "lon": -114.15815535928552,
+          "reports": 1
+        },
+        {
+          "id": "26-00655074",
+          "type": "Damaged sign",
+          "service_name": "Roads - Signs - Missing - Damaged",
+          "community": "SHAGANAPPI",
+          "P": 3.25,
+          "safety": true,
+          "lat": 51.04521146641257,
+          "lon": -114.1266528552515,
+          "reports": 1
+        },
+        {
+          "id": "26-00655235",
+          "type": "Damaged sign",
+          "service_name": "Roads - Signs - Missing - Damaged",
+          "community": "COUNTRY HILLS",
+          "P": 3.25,
+          "safety": true,
+          "lat": 51.14377568374259,
+          "lon": -114.07989394832668,
+          "reports": 1
+        },
+        {
+          "id": "26-00655628",
+          "type": "Pothole",
+          "service_name": "Roads - Pothole Maintenance",
+          "community": "MARTINDALE",
+          "P": 3.25,
+          "safety": true,
+          "lat": 51.11791372657443,
+          "lon": -113.95838711713029,
+          "reports": 1
+        }
+      ]
+    },
+    {
+      "crew": 8,
+      "zone": "W",
+      "centroid": [
+        51.042998,
+        -114.080482
+      ],
+      "jobs": [
+        {
+          "id": "26-00652964",
+          "type": "Pothole",
+          "service_name": "Roads - Pothole Maintenance",
+          "community": "SUNALTA",
+          "P": 3.75,
+          "safety": true,
+          "lat": 51.04295989297799,
+          "lon": -114.10148594325246,
+          "reports": 2
+        },
+        {
+          "id": "26-00651657",
+          "type": "Damaged sign",
+          "service_name": "Roads - Signs - Missing - Damaged",
+          "community": "BELTLINE",
+          "P": 3.5,
+          "safety": true,
+          "lat": 51.03743796399198,
+          "lon": -114.0551860888619,
+          "reports": 1
+        },
+        {
+          "id": "26-00653674",
+          "type": "Debris",
+          "service_name": "Roads - Debris on Street/Sidewalk/Boulevard",
+          "community": "DOWNTOWN COMMERCIAL CORE",
+          "P": 3.25,
+          "safety": false,
+          "lat": 51.0472744358498,
+          "lon": -114.06959371115344,
+          "reports": 3
+        },
+        {
+          "id": "26-00654031",
+          "type": "Damaged sign",
+          "service_name": "Roads - Signs - Missing - Damaged",
+          "community": "DOWNTOWN COMMERCIAL CORE",
+          "P": 3.25,
+          "safety": true,
+          "lat": 51.0472744358498,
+          "lon": -114.06959371115344,
+          "reports": 1
+        },
+        {
+          "id": "26-00654086",
+          "type": "Damaged sign",
+          "service_name": "Roads - Signs - Missing - Damaged",
+          "community": "ELBOW PARK",
+          "P": 3.25,
+          "safety": true,
+          "lat": 51.02134304236776,
+          "lon": -114.08380531110666,
+          "reports": 1
+        }
+      ]
+    }
+  ]
+}

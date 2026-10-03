@@ -2,15 +2,45 @@
 import json
 from pathlib import Path
 
+from dispatch.assign import make_plan
+from dispatch.data_prep import load_clean_tickets
+from dispatch.metrics import compute
+from dispatch.replan import apply_event
+from dispatch.scoring import score
+
 OUT = Path(__file__).resolve().parent / "outputs"
+EVENT = {"event": "crew_out", "crew": 4, "capacity": 0.0}
 
 
-def main() -> None:
-    # tickets = data_prep.load_tickets()
-    # plan_8am = assign.assign_scored(scoring.score_tickets(tickets))
-    # event = replan.apply_event({...}); plan_noon = replan.replan(tickets, plan_8am, event)
-    # write plan_8am.json, plan_noon.json, metrics.json, event.json to OUT
-    raise NotImplementedError
+def _write(name: str, data) -> None:
+    path = OUT / name
+    path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    print(f"wrote {path.relative_to(Path.cwd()) if path.is_relative_to(Path.cwd()) else path}")
+
+
+def main(event: dict = EVENT) -> None:
+    scored = score(load_clean_tickets())
+
+    plan_8am = make_plan(scored, order="priority")
+    plan_fifo = make_plan(scored, order="fifo")
+    plan_noon, changes = apply_event(plan_8am, event)
+
+    metrics = {
+        "8am": compute(plan_8am),
+        "fifo": compute(plan_fifo),
+        "noon": compute(plan_noon, changes),
+        "changes": changes,
+    }
+
+    OUT.mkdir(parents=True, exist_ok=True)
+    _write("plan_8am.json", plan_8am)
+    _write("plan_fifo.json", plan_fifo)
+    _write("plan_noon.json", plan_noon)
+    _write("metrics.json", metrics)
+    _write("event.json", event)
+
+    for key in ("8am", "fifo", "noon"):
+        print(f"{key:>5}: {metrics[key]}")
 
 
 if __name__ == "__main__":

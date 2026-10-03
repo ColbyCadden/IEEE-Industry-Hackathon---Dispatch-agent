@@ -80,4 +80,9 @@ flowchart LR
 
 `.env` is gitignored, so each person keeps their own key on their own machine. **Never commit a real key** (and never put one in `.env.example`). Without a key, the app still runs using the regex parser and template briefings.
 
+### Mission Control (pitch demo)
+
+City-wide 3D replay of the plan, the sick call and the replanned day: double-click
+`mission/start_mission.bat` and press **P**. Details: [`mission/README.md`](mission/README.md).
+
 Data notes: [`data/README.md`](data/README.md). **Python 3.10+** (3.11 is best).

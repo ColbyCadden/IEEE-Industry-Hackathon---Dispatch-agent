@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>311 Mission Control</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="vendor/maplibre-gl.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="map"></div>
+<div id="vignette"></div>
+<div id="alert"></div>
+
+<div id="ui">
+  <header id="brand" class="glass">
+    <div class="eyebrow">Calgary Roads · 311 Dispatch Agent</div>
+    <div class="brand-title">Mission Control</div>
+  </header>
+
+  <section id="clock" class="glass">
+    <div class="eyebrow" id="clock-label">Planning</div>
+    <div id="clock-time">07:00</div>
+    <div class="bar"><div id="clock-bar"></div></div>
+  </section>
+
+  <section id="caption">
+    <div id="cap-step" class="eyebrow"></div>
+    <h1 id="cap-title"></h1>
+    <p id="cap-sub"></p>
+  </section>
+
+  <aside id="roster" class="glass">
+    <div class="panel-head"><span class="eyebrow">Crews</span><span class="hint">click to follow</span></div>
+    <div id="roster-rows"></div>
+  </aside>
+
+  <section id="kpis">
+    <div class="kpi glass" id="k-cover"><div class="eyebrow">Hazards covered</div><div class="kv"><span id="kv-cover">0</span><small id="kv-cover-of">/30</small></div><div class="kn" id="kn-cover"></div></div>
+    <div class="kpi glass" id="k-fixed"><div class="eyebrow">Hazards fixed</div><div class="kv"><span id="kv-fixed">0</span><small id="kv-fixed-of">/30</small></div><div class="kn" id="kn-fixed">crews not yet rolling</div></div>
+    <div class="kpi glass" id="k-jobs"><div class="eyebrow">Jobs done</div><div class="kv"><span id="kv-jobs">0</span><small id="kv-jobs-of">/40</small></div><div class="kn" id="kn-jobs"></div></div>
+    <div class="kpi glass hidden" id="k-replan"><div class="eyebrow">Replan</div><div class="kv replan"><span id="kv-moved">0</span><small>moved</small><span id="kv-dropped">0</span><small>deferred</small><span id="kv-sdrop" class="good">0</span><small>safety lost</small></div><div class="kn" id="kn-replan"></div></div>
+  </section>
+
+  <aside id="feed" class="glass">
+    <div class="panel-head"><span class="eyebrow">Live feed</span></div>
+    <ol id="feed-list"></ol>
+  </aside>
+
+  <nav id="controls" class="glass">
+    <div id="scene-btns"></div>
+    <div class="sep"></div>
+    <button id="btn-play" title="Play / pause (Space)">❚❚</button>
+    <input id="scrub" type="range" min="0" max="1" step="1" value="0" title="Scrub the day">
+    <div id="speeds"></div>
+    <div class="sep"></div>
+    <button id="btn-pitch" class="primary" title="Auto-play the whole story (P)">▶ Pitch mode</button>
+  </nav>
+
+  <div id="radio" class="hidden">
+    <div class="radio-top"><span class="dot"></span><span class="eyebrow">Radio · <span id="radio-time">07:40</span></span></div>
+    <div id="radio-text"></div>
+    <div id="radio-result" class="hidden"></div>
+  </div>
+
+  <div id="finale" class="hidden">
+    <div class="eyebrow">End of shift</div>
+    <div class="fin-grid">
+      <div><div class="fin-v" id="fin-a"></div><div class="fin-l" id="fin-al"></div></div>
+      <div><div class="fin-v bad" id="fin-b"></div><div class="fin-l" id="fin-bl"></div></div>
+      <div><div class="fin-v good" id="fin-c"></div><div class="fin-l" id="fin-cl"></div></div>
+    </div>
+    <button id="btn-replay" class="primary">↺ Replay</button>
+  </div>
+
+  <footer id="fineprint"></footer>
+</div>
+
+<div id="keys">Space play · ←/→ scene · P pitch · C orbit · H hide UI · Esc stop following</div>
+
+<script src="vendor/maplibre-gl.js"></script>
+<script src="vendor/deck.min.js"></script>
+<script src="data/mission.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

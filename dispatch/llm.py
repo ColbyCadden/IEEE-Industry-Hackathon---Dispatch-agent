@@ -1,166 +1,145 @@
-"""Claude agent layer: parse a supervisor's disruption message and write 8 a.m. / noon briefings.
+"""Agent language layer: parse a supervisor's crew update, write 8 a.m. / noon briefings.
 
-Claude is required. Set ANTHROPIC_API_KEY in the environment or in a `.env` file at the repo root.
-Crews are numbered 1..N everywhere.
+Every LLM call has a non-LLM fallback so the demo works offline.
 """
-import json
-import os
-from pathlib import Path
-
-import anthropic
+import re
 
 MODEL = "claude-sonnet-5-5"
-ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
+CREWS = 8
 
-_client: anthropic.Anthropic | None = None
-
-
-class LLMUnavailable(RuntimeError):
-    """Claude could not be reached (missing/invalid key or no network)."""
-
-
-def _load_env() -> None:
-    """Read KEY=VALUE lines from .env into os.environ without overriding existing vars."""
-    if not ENV_FILE.exists():
-        return
-    for line in ENV_FILE.read_text(encoding="utf-8-sig").splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        os.environ.setdefault(key.strip(), value.strip().strip("\"'"))
+_NUMBER_WORDS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8}
+_CREW_RE = re.compile(r"\bcrew\s*(?:#|no\.?|number)?\s*(\d+|" + "|".join(_NUMBER_WORDS) + r")\b", re.I)
+_PARTIAL_RE = re.compile(r"\bdown a (?:guy|person|man|worker)\b|\bshort\w*|\bhalf\b", re.I)
+_OUT_RE = re.compile(r"\b(?:sick|out|off|down)\b", re.I)
 
 
-def has_key() -> bool:
-    _load_env()
-    return bool(os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN"))
+def _event(kind: str, crew: int | None = None, capacity: float = 1.0, question: str | None = None) -> dict:
+    return {"event": kind, "crew": crew, "capacity": capacity, "question": question}
 
 
-def _get_client() -> anthropic.Anthropic:
-    global _client
-    if _client is None:
-        if not has_key():
-            raise LLMUnavailable(
-                "No Claude credentials found. Set ANTHROPIC_API_KEY in your environment "
-                "or add `ANTHROPIC_API_KEY=...` to a .env file in the repo root."
-            )
-        _client = anthropic.Anthropic()
-    return _client
+def regex_parse_event(text: str) -> dict:
+    """Rule-based parse of a crew update. Partial phrases are checked before out/sick/down."""
+    m = _CREW_RE.search(text or "")
+    if not m:
+        return _event("unclear", question="Which crew is affected?")
+    raw = m.group(1).lower()
+    crew = _NUMBER_WORDS.get(raw) or int(raw)
+    if not 1 <= crew <= CREWS:
+        return _event("unclear", question=f"There is no crew {crew} today (crews 1-{CREWS}). Which crew is affected?")
+    if _PARTIAL_RE.search(text):
+        return _event("crew_partial", crew, 0.5)
+    if _OUT_RE.search(text):
+        return _event("crew_out", crew, 0.0)
+    return _event("unclear", crew,
+                  question=f"What's happening with crew {crew}: out for the day, or short-handed?")
 
 
-def _call(system: str, user: str, output_format: dict | None = None) -> str:
-    """One Claude request; returns the text of the reply."""
-    output_config = {"effort": "low"}
-    if output_format is not None:
-        output_config["format"] = output_format
-    try:
-        response = _get_client().messages.create(
-            model=MODEL,
-            max_tokens=1024,
-            system=system,
-            messages=[{"role": "user", "content": user}],
-            output_config=output_config,
-        )
-    except anthropic.AuthenticationError as e:
-        raise LLMUnavailable("Claude rejected the API key. Check ANTHROPIC_API_KEY.") from e
-    except anthropic.APIConnectionError as e:
-        raise LLMUnavailable("Could not reach Claude. Check your internet connection.") from e
-
-    if response.stop_reason == "refusal":
-        raise RuntimeError("Claude declined this request.")
-    if response.stop_reason == "max_tokens":
-        raise RuntimeError("Claude's reply was cut off (max_tokens).")
-    return "".join(b.text for b in response.content if b.type == "text").strip()
+def parse_event(text: str) -> dict:
+    """{"event": "crew_out"|"crew_partial"|"unclear", "crew", "capacity", "question"}."""
+    return regex_parse_event(text)
 
 
-EVENT_SCHEMA = {
-    "type": "json_schema",
-    "schema": {
-        "type": "object",
-        "properties": {
-            "event": {"type": "string", "enum": ["crew_out", "crew_partial", "unclear"]},
-            "crew": {"type": ["integer", "null"]},
-            "capacity": {"type": "number"},
-            "reason": {"type": "string"},
-        },
-        "required": ["event", "crew", "capacity", "reason"],
-        "additionalProperties": False,
-    },
-}
+def _split_metrics(metrics: dict, when: str) -> tuple[dict, dict | None]:
+    """Accept run.py's metrics.json bundle {"8am","fifo","noon","changes"} or one compute() dict."""
+    if "8am" in metrics or "noon" in metrics:
+        return metrics.get("noon" if when == "noon" else "8am", {}), metrics.get("fifo")
+    return metrics, None
 
 
-def parse_event(text: str, crews: int = 8) -> dict:
-    """Turn a free-text field message into an event for replan.apply_event.
-
-    Returns {"event": "crew_out" | "crew_partial" | "unclear", "crew": int | None,
-    "capacity": float, "reason": str}. A missing or out-of-range crew number comes back
-    as "unclear" (apply_event leaves the plan alone), with the reason saying why.
-    """
-    system = (
-        "You read short messages sent to a City of Calgary 311 dispatch supervisor and decide "
-        "how they change today's crew plan.\n"
-        f"There are {crews} road crews, numbered 1 to {crews}.\n"
-        "Event types:\n"
-        '- "crew_out": a crew can do no more work today (sick, called in, truck broke down, '
-        "won't make it). capacity = 0.\n"
-        '- "crew_partial": a crew is working at reduced capacity (short-handed, leaving early, '
-        "one truck down). capacity = the fraction of a normal day it can still do, between 0 and 1 "
-        "(e.g. 2 of 4 workers -> 0.5, leaving at noon -> 0.5).\n"
-        '- "unclear": the message is not about crew capacity, or you cannot tell which crew. '
-        "capacity = 1.\n"
-        "Set crew to the crew number exactly as the message states it, or null if none is given. "
-        "In reason, write one short sentence explaining your reading."
-    )
-    data = json.loads(_call(system, text, EVENT_SCHEMA))
-
-    event = {
-        "event": data["event"],
-        "crew": data.get("crew"),
-        "capacity": min(max(float(data.get("capacity", 0.0)), 0.0), 1.0),
-        "reason": data.get("reason", ""),
-    }
-    if event["event"] == "crew_out":
-        event["capacity"] = 0.0
-    if event["event"] != "unclear":
-        if event["crew"] is None:
-            event.update(event="unclear", reason=f"A crew is affected but the message doesn't say which (1-{crews}).")
-        elif not 1 <= event["crew"] <= crews:
-            event.update(event="unclear", reason=f"Crew {event['crew']} doesn't exist. Crews are numbered 1-{crews}.")
-    return event
+def _sick_crew(plan: dict, changes: dict | None, event: dict | None) -> int | None:
+    if event and event.get("crew"):
+        return event["crew"]
+    if changes and changes.get("moved"):
+        return changes["moved"][0]["from"]
+    empty = [c["crew"] for c in plan["crews"] if not c["jobs"]]
+    return empty[0] if len(empty) == 1 else None
 
 
-def _describe_event(event: dict | None) -> str:
-    kind = (event or {}).get("event")
-    if kind == "crew_out":
-        return f"Crew {event.get('crew')} is out for the rest of the day."
-    if kind == "crew_partial":
-        return f"Crew {event.get('crew')} is down to {event.get('capacity', 0):.0%} capacity."
-    return "No disruption."
+def _plural(n: int, word: str) -> str:
+    return f"{n} {word}{'' if n == 1 else 's'}"
 
 
-def briefing(metrics: dict, when: str, event: dict | None = None) -> str:
-    """Return a short plain-English supervisor briefing for `when` = "8am" or "noon"."""
-    if when == "8am":
-        focus = (
-            "This is the 8 a.m. briefing. Say what the crews are tackling first and why, "
-            "and how the plan beats sending the oldest tickets first (FIFO). "
-            "P is total priority points covered; safety is the number of safety jobs covered."
-        )
-    else:
-        focus = (
-            "This is the noon replan briefing. Say what disrupted the morning plan, how many jobs "
-            "moved to another crew or were dropped (and how many of those dropped were safety jobs), "
-            "and what important work is still at risk. P is total priority points covered."
-        )
-    system = (
-        "You write radio-style briefings for a City of Calgary Roads supervisor. "
-        "Five sentences or fewer, plain text, no markdown, no headers, no bullet points. "
-        "Use concrete numbers from the data. Do not invent numbers that are not in the data. "
-        "Crews are numbered 1 and up."
-    )
-    user = (
-        f"{focus}\n\n"
-        f"Disruption: {_describe_event(event)}\n\n"
-        f"Plan metrics (JSON):\n{json.dumps(metrics, sort_keys=True, default=str, indent=1)}"
-    )
-    return _call(system, user)
+def template_briefing(plan: dict, metrics: dict, when: str = "8am", changes: dict | None = None,
+                      event: dict | None = None) -> str:
+    """Plain-English supervisor briefing built from the numbers, no LLM."""
+    m, fifo = _split_metrics(metrics, when)
+    jobs = [j for c in plan["crews"] for j in c["jobs"]]
+    active = sum(1 for c in plan["crews"] if c["jobs"])
+    n = m.get("n", len(jobs))
+    safety = m.get("safety", sum(bool(j["safety"]) for j in jobs))
+
+    if when != "noon":
+        lines = [f"Good morning. Today's plan sends {_plural(active, 'crew')} to {_plural(n, 'job')}, "
+                 f"and {safety} of them are safety tickets (potholes and missing or damaged signs)."]
+        if fifo:
+            gap = safety - fifo["safety"]
+            lines.append(f"Working oldest-first would have covered only {fifo['safety']} safety tickets, "
+                         f"so this plan clears {gap} more safety hazards with the same crews.")
+        if jobs:
+            top = max(jobs, key=lambda j: j["P"])
+            crew = next(c for c in plan["crews"] if top in c["jobs"])
+            lines.append(f"Highest priority is a {top['type'].lower()} in {top['community'].title()}, "
+                         f"assigned to crew {crew['crew']} ({crew['zone']}).")
+        lines.append("Report any crew changes here and I will replan.")
+        return " ".join(lines)
+
+    changes = changes or (metrics.get("changes") if isinstance(metrics, dict) else None) or {}
+    moved = m.get("moved", len(changes.get("moved", [])))
+    dropped = m.get("dropped", len(changes.get("dropped", [])))
+    safety_dropped = m.get("safety_dropped")
+    crew = _sick_crew(plan, changes, event)
+    who = f"Crew {crew}" if crew else "One crew"
+    partial = event and event.get("event") == "crew_partial"
+
+    lines = [f"Noon update: {who} is {'short-handed' if partial else 'out'}, "
+             f"so the plan now covers {_plural(n, 'job')} with {safety} safety tickets."]
+    lines.append(f"{_plural(moved, 'job')} {'was' if moved == 1 else 'were'} moved to nearby crews "
+                 f"and {_plural(dropped, 'lower-priority job')} {'was' if dropped == 1 else 'were'} "
+                 f"deferred to tomorrow.")
+    if safety_dropped == 0:
+        lines.append("No safety tickets were dropped.")
+    elif safety_dropped:
+        lines.append(f"Heads up: {_plural(safety_dropped, 'safety ticket')} had to be deferred; "
+                     f"consider overtime or a call-in to cover {'it' if safety_dropped == 1 else 'them'}.")
+    return " ".join(lines)
+
+
+def briefing(plan: dict, metrics: dict, when: str = "8am", changes: dict | None = None,
+             event: dict | None = None) -> str:
+    """3-4 plain-English sentences for a roads supervisor. Template only for now."""
+    return template_briefing(plan, metrics, when, changes, event)
+
+
+if __name__ == "__main__":
+    import json
+    from pathlib import Path
+
+    out = Path("dispatch/outputs")
+    metrics = json.loads((out / "metrics.json").read_text())
+    plan_8am = json.loads((out / "plan_8am.json").read_text())
+    plan_noon = json.loads((out / "plan_noon.json").read_text())
+    event = json.loads((out / "event.json").read_text())
+    print("8am:  ", briefing(plan_8am, metrics, "8am"))
+    print()
+    print("noon: ", briefing(plan_noon, metrics, "noon", metrics["changes"], event))
+    print()
+    print("noon (contract args only, flat compute() dict, no event):")
+    print("      ", briefing(plan_noon, metrics["noon"], "noon", metrics["changes"]))
+    print()
+    checks = [
+        ("Crew 4 called in sick", "crew_out", 4, 0.0),
+        ("crew 2 is down a guy today", "crew_partial", 2, 0.5),
+        ("Someone called in sick", "unclear", None, None),
+        ("CREW 7 OUT", "crew_out", 7, 0.0),
+    ]
+    extras = ["crew 9 is sick", "crew 3 checking in", "Crew five is short two people", "crew 6 off today"]
+    ok = True
+    for text, kind, crew, cap in checks:
+        got = parse_event(text)
+        good = got["event"] == kind and got["crew"] == crew and (cap is None or got["capacity"] == cap)
+        ok &= good
+        print(f"{'PASS' if good else 'FAIL'}  {text!r:32} -> {got}")
+    print()
+    for text in extras:
+        print(f"      {text!r:32} -> {parse_event(text)}")
+    print("\nALL PASS" if ok else "\nSOME FAILED")

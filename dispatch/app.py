@@ -1,264 +1,302 @@
-"""Streamlit dashboard: `streamlit run dispatch/app.py` from the repo root."""
+"""Streamlit demo: `streamlit run dispatch/app.py` (run `python -m dispatch.run` first)."""
+import json
 import sys
 from pathlib import Path
 
-import pandas as pd
+import pydeck as pdk
 import streamlit as st
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))  # `streamlit run` only puts dispatch/ on the path
 
-from dispatch import llm  # noqa: E402
-from dispatch.assign import CREWS, JOBS_PER_CREW, make_plan  # noqa: E402
-from dispatch.data_prep import load_clean_tickets  # noqa: E402
-from dispatch.metrics import compute  # noqa: E402
-from dispatch.replan import apply_event  # noqa: E402
-from dispatch.scoring import score  # noqa: E402
+try:  # llm.py is owned by a teammate; the dashboard must still load without it
+    from dispatch import llm  # noqa: E402
+except Exception:
+    llm = None
 
-CREW_COLORS = [
-    "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b",
-    "#e377c2", "#7f7f7f", "#bcbd22", "#17becf", "#393b79", "#637939",
+OUT = ROOT / "dispatch" / "outputs"
+CREW_COLORS = [  # one per crew, readable on a light basemap
+    [31, 119, 180], [255, 127, 14], [44, 160, 44], [214, 39, 40],
+    [148, 103, 189], [140, 86, 75], [227, 119, 194], [23, 190, 207],
 ]
-STATUS_COLORS = {"moved": "#fff3cd", "dropped": "#f8d7da"}
-TABLE_COLS = ["crew", "zone", "id", "type", "community", "P", "safety", "reports"]
+QUICK_FILLS = ["Crew 4 called in sick", "Crew 2 is down a guy"]
+
+
+# --- data ------------------------------------------------------------------
+
+def _fake_outputs() -> dict:
+    """Contract-shaped stand-in so the app still opens before `python -m dispatch.run`."""
+    zones = [("E", 51.055, -114.01), ("NW", 51.118, -114.275), ("W", 51.042, -114.147), ("SE", 50.892, -113.941),
+             ("S", 50.914, -114.078), ("NE", 51.098, -113.938), ("N", 51.152, -114.123), ("W", 51.043, -114.080)]
+    kinds = [("Pothole", "Roads - Pothole Maintenance", True, 3),
+             ("Damaged sign", "Roads - Signs - Missing - Damaged", True, 3),
+             ("Debris", "Roads - Debris on Street/Sidewalk/Boulevard", False, 2)]
+
+    def plan(fifo: bool) -> dict:
+        crews = []
+        for i, (zone, lat, lon) in enumerate(zones):
+            jobs = []
+            for k in range(5):
+                t, name, safety, w = kinds[(i + k + fifo) % 3] if not fifo or k < 2 else kinds[2]
+                jobs.append({"id": f"FAKE-{i + 1}{k + 1}", "type": t, "service_name": name, "community": "SAMPLE",
+                             "P": w + 0.25 * k, "safety": safety, "lat": lat + 0.01 * (k - 2),
+                             "lon": lon + 0.012 * ((k * 3) % 5 - 2), "reports": 1})
+            crews.append({"crew": i + 1, "zone": zone, "centroid": [lat, lon], "jobs": jobs})
+        return {"crews": crews}
+
+    def compute(p: dict) -> dict:
+        jobs = [j for c in p["crews"] for j in c["jobs"]]
+        return {"P": round(sum(j["P"] for j in jobs), 2), "safety": sum(j["safety"] for j in jobs), "n": len(jobs)}
+
+    p8, pf = plan(False), plan(True)
+    return {"plan_8am": p8, "plan_fifo": pf, "metrics": {"8am": compute(p8), "fifo": compute(pf)}, "fake": True}
+
+
+@st.cache_data
+def load_outputs() -> dict:
+    files = {"plan_8am": "plan_8am.json", "plan_fifo": "plan_fifo.json", "metrics": "metrics.json"}
+    if not all((OUT / f).exists() for f in files.values()):
+        return _fake_outputs()
+    data = {k: json.loads((OUT / f).read_text(encoding="utf-8")) for k, f in files.items()}
+    data["fake"] = False
+    return data
+
+
+def replan(plan_8am: dict, metrics: dict, event: dict) -> dict:
+    """Run the engine's replan + metrics. Returns {"plan","changes","metrics"} or {"error"}."""
+    try:
+        from dispatch.metrics import compute
+        from dispatch.replan import apply_event
+        new_plan, changes = apply_event(plan_8am, event)
+        bundle = {k: v for k, v in metrics.items() if k in ("8am", "fifo")}
+        bundle["noon"] = compute(new_plan, changes)
+        bundle["changes"] = changes
+        return {"plan": new_plan, "changes": changes, "metrics": bundle}
+    except Exception as e:  # engine missing or broken: keep the app usable
+        return {"error": f"{type(e).__name__}: {e}"}
+
+
+# --- llm wrappers (contract signatures only; fall back if llm.py fails) ------
+
+EVENTS = ("crew_out", "crew_partial", "unclear")
+
+
+def safe_parse(text: str) -> tuple[dict | None, str | None]:
+    """llm.parse_event(text) checked against the contract. Returns (event, error)."""
+    try:
+        ev = llm.parse_event(text)
+        if not isinstance(ev, dict) or ev.get("event") not in EVENTS:
+            raise ValueError(f"unexpected result {ev!r}")
+        if ev["event"] != "unclear" and ev.get("crew") not in range(1, 9):
+            raise ValueError(f"crew must be 1-8, got {ev.get('crew')!r}")
+        ev.setdefault("capacity", 0.0 if ev["event"] == "crew_out" else 0.5)
+        ev.setdefault("question", None)
+        return ev, None
+    except Exception as e:
+        return None, f"{type(e).__name__}: {e}"
+
+
+def safe_briefing(plan: dict, metrics: dict, when: str, changes: dict | None = None) -> tuple[str, bool]:
+    """llm.briefing(...) or a short numbers-only fallback. Returns (text, came_from_llm_module)."""
+    try:
+        text = llm.briefing(plan, metrics, when, changes)
+        if isinstance(text, str) and text.strip():
+            return text, True
+    except Exception:
+        pass
+    if when == "noon":
+        m = metrics["noon"]
+        return (f"Noon plan: {m['n']} jobs, {m['safety']} safety tickets. {m.get('moved', 0)} jobs moved, "
+                f"{m.get('dropped', 0)} deferred, {m.get('safety_dropped', 0)} safety tickets deferred."), False
+    m, f = metrics["8am"], metrics["fifo"]
+    return (f"8 a.m. plan: {m['n']} jobs, {m['safety']} safety tickets "
+            f"(oldest-first would cover {f['safety']})."), False
+
+
+# --- view helpers ------------------------------------------------------------
+
+def describe(event: dict) -> str:
+    kind, crew = event.get("event"), event.get("crew")
+    if kind == "crew_out":
+        return f"Crew {crew} is **out for the day**. All of its jobs will be reassigned or deferred."
+    if kind == "crew_partial":
+        cap = event.get("capacity", 0.5)
+        return (f"Crew {crew} is **short-handed** ({cap:.0%} capacity). "
+                f"It keeps its top {round(5 * cap)} jobs; the rest will be reassigned or deferred.")
+    return "I couldn't tell what changed."
+
+
+def map_layers(plan: dict, changes: dict | None) -> list:
+    moved = {m["id"] for m in (changes or {}).get("moved", [])}
+    points = []
+    for c in plan["crews"]:
+        color = CREW_COLORS[(c["crew"] - 1) % len(CREW_COLORS)]
+        for j in c["jobs"]:
+            points.append({**j, "crew": c["crew"], "zone": c["zone"], "color": color,
+                           "radius": 7 if j["safety"] else 4,
+                           "line": [0, 0, 0] if j["id"] in moved else [255, 255, 255],
+                           "status": "moved here" if j["id"] in moved else ("safety" if j["safety"] else "")})
+    dropped = [{**j, "crew": "-", "zone": "-", "color": [150, 150, 150], "radius": 4, "line": [90, 90, 90],
+                "status": "deferred"} for j in (changes or {}).get("dropped_jobs", [])]
+    centroids = [{"crew": c["crew"], "zone": c["zone"], "lat": c["centroid"][0], "lon": c["centroid"][1],
+                  "label": f"Crew {c['crew']}", "color": CREW_COLORS[(c["crew"] - 1) % len(CREW_COLORS)]}
+                 for c in plan["crews"]]
+    common = dict(get_position="[lon, lat]", pickable=True)
+    return [
+        pdk.Layer("ScatterplotLayer", points + dropped, get_fill_color="color", get_radius="radius", radius_units="'pixels'",
+                  get_line_color="line", stroked=True, line_width_min_pixels=2, opacity=0.85, **common),
+        pdk.Layer("TextLayer", centroids, get_text="label", get_color="color", get_size=14,
+                  get_alignment_baseline="'bottom'", font_weight=700, **common),
+    ]
+
+
+def render_map(plan: dict, changes: dict | None = None) -> None:
+    deck = pdk.Deck(
+        layers=map_layers(plan, changes),
+        initial_view_state=pdk.ViewState(latitude=51.04, longitude=-114.08, zoom=9.6),
+        map_provider="carto", map_style="light",
+        tooltip={"text": "{type} - {community}\nP {P} | crew {crew} ({zone}) {status}\nticket {id}"},
+    )
+    st.pydeck_chart(deck)
+    st.caption("Colour = crew. Large dots = safety tickets. Black outline = moved at noon. Grey = deferred.")
+
+
+def render_metrics(view: str, m: dict, fifo: dict, base: dict) -> None:
+    c1, c2, c3, c4 = st.columns(4)
+    if view == "FIFO":
+        c1.metric("Priority served", f"{m['P']:.1f}")
+        c2.metric("Safety served", m["safety"])
+        c3.metric("Jobs moved", "-")
+        c4.metric("Jobs deferred", "-")
+        return
+    ref, ref_name = (fifo, "vs FIFO") if view == "Agent" else (base, "vs 8 a.m.")
+    c1.metric("Priority served", f"{m['P']:.1f}", f"{m['P'] - ref['P']:+.1f} {ref_name}")
+    c2.metric("Safety served", m["safety"], f"{m['safety'] - ref['safety']:+d} {ref_name}")
+    c3.metric("Jobs moved", m.get("moved", 0))
+    c4.metric("Jobs deferred", m.get("dropped", 0),
+              help=f"Safety tickets deferred: {m.get('safety_dropped', 0)}", delta_color="inverse")
+
+
+def render_crews(plan: dict, changes: dict | None, out_crew: int | None) -> None:
+    moved = {m["id"] for m in (changes or {}).get("moved", [])}
+    cols = st.columns(4)
+    for i, c in enumerate(plan["crews"]):
+        with cols[i % 4].container(border=True):
+            r, g, b = CREW_COLORS[(c["crew"] - 1) % len(CREW_COLORS)]
+            st.markdown(f"<span style='color:rgb({r},{g},{b});font-size:1.3em'>●</span> "
+                        f"**Crew {c['crew']}** · {c['zone']}", unsafe_allow_html=True)
+            if not c["jobs"]:
+                st.caption("Out today" if c["crew"] == out_crew else "No jobs")
+                continue
+            safety = sum(j["safety"] for j in c["jobs"])
+            st.caption(f"{len(c['jobs'])} jobs · {safety} safety · P {sum(j['P'] for j in c['jobs']):.1f}")
+            for j in sorted(c["jobs"], key=lambda j: -j["P"]):
+                tags = (" ⚠️" if j["safety"] else "") + (" ↪ moved" if j["id"] in moved else "")
+                st.markdown(f"<small>{j['type']} · {j['community'].title()} · P {j['P']:.2f}{tags}</small>",
+                            unsafe_allow_html=True)
+
+
+# --- page ------------------------------------------------------------------
 
 st.set_page_config(page_title="311 Dispatch Agent", layout="wide")
+data = load_outputs()
+metrics = data["metrics"]
+ss = st.session_state
+ss.setdefault("update_text", "")
+ss.setdefault("parsed", None)
+ss.setdefault("noon", None)
 
+st.title("Who should 311 send next?")
+st.caption("Calgary Roads · 8 crews × 5 jobs · priority agent vs oldest-first (FIFO)")
+if data["fake"]:
+    st.warning("Showing sample data: run `python -m dispatch.run` to generate dispatch/outputs/.")
 
-@st.cache_data
-def load_scored() -> tuple[pd.DataFrame, pd.DataFrame, bool]:
-    """(open tickets, scored tickets, using_temp_weights)."""
-    tickets = load_clean_tickets()
-    try:
-        return tickets, score(tickets), False
-    except ImportError:
-        # TEMPORARY test table, same as the engine's __main__ blocks, until weights.py lands.
-        tmp_weights = {
-            "Roads - Pothole Maintenance": 3,
-            "Roads - Signs - Missing - Damaged": 3,
-            "Roads - Signs - Traffic and Roadmarking": 3,
-            "Roads - Debris on Street/Sidewalk/Boulevard": 2,
-            "Roads - Signs - Parking": 1,
-            "WRS - Waste - Residential": 1,
-            "WRS - Commercial Collection Services": 1,
-            "WRS - New Service - Carts": 1,
-        }
-        tmp_safety = set(list(tmp_weights)[:4])
-        tmp_short = {name: name.split(" - ", 1)[-1] for name in tmp_weights}
-        return tickets, score(tickets, weights=tmp_weights, safety_types=tmp_safety,
-                              short_names=tmp_short), True
+views = ["Agent", "FIFO"] + (["Agent - noon"] if ss.noon and "plan" in ss.noon else [])
+if ss.get("view") not in views:
+    ss.view = views[-1] if ss.noon and "plan" in ss.noon else "Agent"
+view = st.radio("Plan", views, horizontal=True, key="view", label_visibility="collapsed")
 
+if view == "FIFO":
+    plan, m, changes, out_crew = data["plan_fifo"], metrics["fifo"], None, None
+elif view == "Agent":
+    plan, m, changes, out_crew = data["plan_8am"], metrics["8am"], None, None
+else:
+    plan, m, changes = ss.noon["plan"], ss.noon["metrics"]["noon"], ss.noon["changes"]
+    out_crew = ss.noon["event"].get("crew")
 
-@st.cache_data
-def build_plan(order: str, crews: int, jobs: int) -> dict:
-    scored = load_scored()[1]
-    return make_plan(scored, order=order, crews=crews, jobs=jobs)
+render_metrics(view, m, metrics["fifo"], metrics["8am"])
 
+left, right = st.columns([3, 2])
+with left:
+    render_map(plan, changes)
+with right:
+    st.subheader("Briefing")
+    with st.container(border=True):
+        if view == "FIFO":
+            st.write(f"Baseline: oldest tickets first, same crews and zones. It covers {m['safety']} safety "
+                     f"tickets, versus {metrics['8am']['safety']} in the agent's plan.")
+        else:
+            if view == "Agent":
+                text, ok = safe_briefing(data["plan_8am"], metrics, "8am")
+            else:
+                text, ok = safe_briefing(plan, ss.noon["metrics"], "noon", changes)
+            st.write(text)
+            if not ok:
+                st.caption("Briefing service unavailable - showing the numbers only.")
 
-def plan_df(plan: dict) -> pd.DataFrame:
-    """Flatten {"crews": [{"crew", "zone", "jobs": [...]}]} into one row per job."""
-    rows = [{"crew": c["crew"], "zone": c["zone"], **j} for c in plan["crews"] for j in c["jobs"]]
-    df = pd.DataFrame(rows)
-    if df.empty:
-        return df
-    return df.sort_values(["crew", "P"], ascending=[True, False]).reset_index(drop=True)
+    st.subheader("Report a crew update")
 
+    def _fill(text: str) -> None:
+        ss.update_text, ss.parsed = text, None
 
-def crew_color(crew: int) -> str:
-    return CREW_COLORS[(crew - 1) % len(CREW_COLORS)]
+    b1, b2 = st.columns(2)
+    b1.button(QUICK_FILLS[0], on_click=_fill, args=(QUICK_FILLS[0],), use_container_width=True)
+    b2.button(QUICK_FILLS[1], on_click=_fill, args=(QUICK_FILLS[1],), use_container_width=True)
+    st.text_area("What happened?", key="update_text", height=80,
+                 placeholder="e.g. Crew 4 called in sick, they're out for the day")
+    if st.button("Submit", type="primary", disabled=not ss.update_text.strip()):
+        ss.parsed, ss.parse_error = safe_parse(ss.update_text)
 
+    if ss.get("parse_error") and not ss.parsed:
+        with st.container(border=True):
+            st.error("Couldn't read that update automatically. Pick the crew and what happened:")
+            st.caption(ss.parse_error)
+            m_crew, m_kind = st.columns(2)
+            crew = m_crew.selectbox("Crew", range(1, 9), index=3)
+            kind = m_kind.radio("Status", ["Out for the day", "Short-handed (50%)"])
+            if st.button("Use this update"):
+                ss.parsed = {"event": "crew_out" if kind.startswith("Out") else "crew_partial", "crew": crew,
+                             "capacity": 0.0 if kind.startswith("Out") else 0.5, "question": None}
+                ss.parse_error = None
+                st.rerun()
 
-def crew_map(df: pd.DataFrame) -> None:
-    pts = df.copy()
-    pts["color"] = pts["crew"].map(crew_color)
-    st.map(pts, latitude="lat", longitude="lon", color="color", size=80)
-    legend = " &nbsp; ".join(
-        f"<span style='color:{crew_color(c)}'>■</span> Crew {c}" for c in sorted(pts["crew"].unique())
-    )
-    st.markdown(f"<small>{legend}</small>", unsafe_allow_html=True)
+    if ss.parsed:
+        event = ss.parsed
+        with st.container(border=True):
+            if event["event"] == "unclear":
+                st.warning(event.get("question") or "Which crew is affected?")
+                st.caption("Add the missing detail above and submit again.")
+            else:
+                st.markdown(f"**Confirm update:** {describe(event)}")
+                st.json(event, expanded=False)
+                c_ok, c_cancel = st.columns(2)
+                if c_ok.button("Confirm and replan", type="primary", use_container_width=True):
+                    result = replan(data["plan_8am"], metrics, event)
+                    ss.noon = {**result, "event": event}
+                    ss.parsed = None
+                    ss.pop("view", None)
+                    st.rerun()
+                if c_cancel.button("Cancel", use_container_width=True):
+                    ss.parsed = None
+                    st.rerun()
 
+    if ss.noon and "error" in ss.noon:
+        st.error(f"Replan engine isn't available: {ss.noon['error']}")
+    elif ss.noon:
+        if st.button("Reset to 8 a.m. plan"):
+            ss.noon = None
+            ss.pop("view", None)
+            st.rerun()
 
-def replan_table(before: dict, changes: dict) -> pd.DataFrame:
-    """Every 8 a.m. job with its noon crew and status: kept / moved / dropped."""
-    df = plan_df(before).rename(columns={"crew": "crew_8am"})
-    moved_to = {m["id"]: m["to"] for m in changes["moved"]}
-    dropped = set(changes["dropped"])
-
-    def status(row):
-        if row["id"] in dropped:
-            return "dropped"
-        return "moved" if row["id"] in moved_to else "kept"
-
-    df["status"] = df.apply(status, axis=1)
-    df["crew_noon"] = [
-        pd.NA if s == "dropped" else moved_to.get(i, c)
-        for i, c, s in zip(df["id"], df["crew_8am"], df["status"])
-    ]
-    df["crew_noon"] = df["crew_noon"].astype("Int64")
-    order = {"dropped": 0, "moved": 1, "kept": 2}
-    df = df.sort_values(["status", "crew_8am", "P"], ascending=[True, True, False],
-                        key=lambda s: s.map(order) if s.name == "status" else s)
-    return df[["status", "crew_8am", "crew_noon", "id", "type", "community", "P", "safety"]]
-
-
-def highlight(row):
-    color = STATUS_COLORS.get(row["status"], "")
-    return [f"background-color: {color}; color: #000" if color else ""] * len(row)
-
-
-def ask_claude(fn, *args, **kwargs):
-    """Call the LLM layer; show the problem instead of a traceback."""
-    try:
-        return fn(*args, **kwargs)
-    except llm.LLMUnavailable as e:
-        st.error(f"Claude unavailable: {e}")
-    except Exception as e:  # keep the dashboard alive during the demo
-        st.error(f"Claude call failed: {type(e).__name__}: {e}")
-    return None
-
-
-def event_label(event: dict) -> str:
-    if event["event"] == "crew_out":
-        return f"Crew {event['crew']} out for the day"
-    if event["event"] == "crew_partial":
-        return f"Crew {event['crew']} at {event['capacity']:.0%} capacity"
-    return "No change to the plan"
-
-
-# ---------------------------------------------------------------- sidebar
-with st.sidebar:
-    st.header("Settings")
-    crews = st.slider("Crews", 2, 12, CREWS)
-    jobs = st.slider("Jobs per crew", 1, 10, JOBS_PER_CREW)
-    st.divider()
-    if llm.has_key():
-        st.success(f"Claude connected ({llm.MODEL})")
-    else:
-        st.error("No ANTHROPIC_API_KEY found. Briefings and message reading are disabled. "
-                 "Add `ANTHROPIC_API_KEY=...` to a `.env` file in the repo root.")
-
-# A new crew setup invalidates any replan and briefings from the old setup.
-if st.session_state.get("setup") != (crews, jobs):
-    for key in ["pending_event", "event", "plan_noon", "changes", "brief_8am", "brief_noon"]:
-        st.session_state.pop(key, None)
-    st.session_state["setup"] = (crews, jobs)
-
-# ---------------------------------------------------------------- 8 a.m. plans
-tickets, scored, temp_weights = load_scored()
-plan_8am = build_plan("priority", crews, jobs)
-plan_fifo = build_plan("fifo", crews, jobs)
-m_agent, m_fifo = compute(plan_8am), compute(plan_fifo)
-df_8am = plan_df(plan_8am)
-
-st.title("311 Dispatch Agent")
-st.caption("Who should 311 send next? A priority-scored crew plan vs oldest-first, "
-           "replanned live when a crew drops out.")
-if temp_weights:
-    st.warning("`weights.py` isn't ready yet, so scores use the engine's temporary test weights.")
-
-c1, c2, c3, c4 = st.columns(4)
-c1.metric("Open problems", len(tickets), help="Open tickets after merging duplicate reports")
-c2.metric("Crew slots today", crews * jobs)
-c3.metric("Priority covered (P)", f"{m_agent['P']:.1f}", f"{m_agent['P'] - m_fifo['P']:+.1f} vs oldest-first")
-c4.metric("Safety jobs covered", m_agent["safety"], f"{m_agent['safety'] - m_fifo['safety']:+d} vs oldest-first",
-          help=f"{int(scored['safety'].sum())} safety tickets in the backlog")
-
-tab_plan, tab_disrupt, tab_tickets = st.tabs(["8 a.m. plan", "Disruption & replan", "All scored tickets"])
-
-# ---------------------------------------------------------------- tab: 8 a.m. plan
-with tab_plan:
-    left, right = st.columns([3, 2])
-    with left:
-        st.subheader("Crew assignments")
-        st.dataframe(df_8am[TABLE_COLS], hide_index=True, width="stretch", height=420)
-    with right:
-        st.subheader("Map")
-        crew_map(df_8am)
-
-    st.subheader("Scored plan vs oldest-first")
-    comp = pd.DataFrame(
-        {"Scored plan": m_agent, "Oldest-first": m_fifo}
-    ).rename(index={"P": "Priority points (P)", "safety": "Safety jobs", "n": "Jobs assigned"})
-    comp["Difference"] = comp["Scored plan"] - comp["Oldest-first"]
-    st.dataframe(comp, width="stretch")
-
-    st.subheader("8 a.m. briefing")
-    if st.button("Generate 8 a.m. briefing", disabled=not llm.has_key()):
-        with st.spinner("Claude is writing the briefing..."):
-            payload = {
-                "crews": crews,
-                "jobs_per_crew": jobs,
-                "scored_plan": m_agent,
-                "oldest_first_baseline": m_fifo,
-                "safety_tickets_in_backlog": int(scored["safety"].sum()),
-                "jobs_by_type": df_8am["type"].value_counts().to_dict(),
-                "crew_zones": {c["crew"]: c["zone"] for c in plan_8am["crews"]},
-            }
-            st.session_state["brief_8am"] = ask_claude(llm.briefing, payload, "8am")
-    if st.session_state.get("brief_8am"):
-        st.info(st.session_state["brief_8am"])
-
-# ---------------------------------------------------------------- tab: disruption
-with tab_disrupt:
-    st.subheader("Message from the field")
-    msg = st.text_input(
-        "What happened?",
-        placeholder="e.g. Crew 4 just called in sick / Crew 2 is short two guys today",
-    )
-    if st.button("Read message", disabled=not (msg and llm.has_key())):
-        with st.spinner("Claude is reading the message..."):
-            st.session_state["pending_event"] = ask_claude(llm.parse_event, msg, crews)
-        for key in ["event", "plan_noon", "changes", "brief_noon"]:
-            st.session_state.pop(key, None)
-
-    pending = st.session_state.get("pending_event")
-    if pending:
-        st.markdown(f"**Claude's reading:** {event_label(pending)}  \n_{pending['reason']}_")
-        if pending["event"] == "unclear":
-            st.warning("No replan needed, or Claude couldn't tell which crew. Try rewording the message.")
-        elif st.button(f"Confirm and replan: {event_label(pending)}", type="primary"):
-            event = {k: pending[k] for k in ("event", "crew", "capacity")}
-            new_plan, changes = apply_event(plan_8am, event, jobs)
-            st.session_state.update(event=event, plan_noon=new_plan, changes=changes)
-
-    if st.session_state.get("plan_noon") is not None:
-        event = st.session_state["event"]
-        plan_noon = st.session_state["plan_noon"]
-        changes = st.session_state["changes"]
-        m_noon = compute(plan_noon, changes)
-
-        st.divider()
-        st.subheader(f"Noon replan: {event_label(event)}")
-        d1, d2, d3, d4 = st.columns(4)
-        d1.metric("Moved to another crew", m_noon["moved"])
-        d2.metric("Dropped", m_noon["dropped"])
-        d3.metric("Safety jobs dropped", m_noon["safety_dropped"])
-        d4.metric("Priority covered (P)", f"{m_noon['P']:.1f}", f"{m_noon['P'] - m_agent['P']:+.1f} vs 8 a.m.")
-
-        left, right = st.columns([3, 2])
-        with left:
-            table = replan_table(plan_8am, changes)
-            st.dataframe(table.style.apply(highlight, axis=1).format({"P": "{:.2f}"}),
-                         hide_index=True, width="stretch", height=420)
-        with right:
-            crew_map(plan_df(plan_noon))
-
-        st.subheader("Noon briefing")
-        if st.button("Generate noon briefing", disabled=not llm.has_key()):
-            with st.spinner("Claude is writing the briefing..."):
-                payload = {
-                    "plan_8am": m_agent,
-                    "plan_noon": m_noon,
-                    "moved": changes["moved"],
-                    "dropped_jobs": [
-                        {k: j[k] for k in ("id", "type", "community", "P", "safety")}
-                        for j in changes["dropped_jobs"]
-                    ],
-                }
-                st.session_state["brief_noon"] = ask_claude(llm.briefing, payload, "noon", event)
-        if st.session_state.get("brief_noon"):
-            st.info(st.session_state["brief_noon"])
-
-# ---------------------------------------------------------------- tab: tickets
-with tab_tickets:
-    cols = ["id", "type", "community", "requested_date", "days_open", "reports", "weight", "P", "safety"]
-    st.dataframe(scored.sort_values("P", ascending=False)[cols], hide_index=True, width="stretch")
+st.subheader("Crews")
+render_crews(plan, changes, out_crew)

@@ -14,6 +14,11 @@ try:  # llm.py is owned by a teammate; the dashboard must still load without it
 except Exception:
     llm = None
 
+try:  # the baseline / result / improved comparison is shared with `python -m dispatch.improvement`
+    from dispatch import improvement  # noqa: E402
+except Exception:
+    improvement = None
+
 OUT = ROOT / "dispatch" / "outputs"
 CREW_COLORS = [  # one per crew, readable on a light basemap
     [31, 119, 180], [255, 127, 14], [44, 160, 44], [214, 39, 40],
@@ -385,6 +390,45 @@ def render_metrics(view: str, m: dict, fifo: dict, base: dict, out_crew: int | N
                "Our agent covered more safety tickets than oldest-first in all 16, by between +9 and +15.")
 
 
+def _stage_html(row: dict, tone: str) -> str:
+    """One card of the improvement panel: safety tickets covered, then jobs and total P."""
+    m = row["m"]
+    title = (f"<div style='font-size:.8rem;font-weight:700;letter-spacing:.06em'>{row['stage']}"
+             f"<span style='font-weight:400;opacity:.7'> · {row['what']}</span></div>")
+    if m is None:
+        return (f"<div style='{BOX};opacity:.45'>{title}"
+                f"<div style='font-size:1rem;font-style:italic;margin-top:.5rem'>run python -m dispatch.run</div></div>")
+    extra = (f"{m['moved']} moved · {m['deferred']} deferred · {m['safety_dropped']} safety dropped"
+             if "moved" in m else "&nbsp;")
+    return (f"<div style='{BOX}'>{title}"
+            f"<div style='display:flex;align-items:baseline;gap:.5rem;margin:.15rem 0'>"
+            f"<span style='font-size:2.6rem;font-weight:800;line-height:1.05;{tone}'>{m['safety']}</span>"
+            f"<span style='font-size:.85rem;opacity:.7'>safety tickets covered</span></div>"
+            f"<div style='font-size:.8rem;opacity:.8'>{m['jobs']} jobs · total P {m['P']:.2f}</div>"
+            f"<div style='font-size:.8rem;opacity:.8'>{extra}</div></div>")
+
+
+def render_improvement(metrics: dict) -> None:
+    """Baseline, first result and improved result side by side, always on screen (no clicking)."""
+    if improvement is None:
+        return
+    try:
+        event = json.loads((OUT / "event.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        event = None
+    try:
+        rows = improvement.comparison_rows(metrics, event)
+        summary = improvement.summary_line(rows, event)
+    except Exception:  # unexpected metrics shape: hide the panel rather than break the page
+        return
+    st.markdown("**Improvement round:** baseline → first result → improved result "
+                "(safety tickets covered, 8 crews × 5 jobs)")
+    tones = {"fifo": "opacity:.45", "8am": f"color:{OURS_COLOR}", "noon": f"color:{OURS_COLOR}"}
+    for col, row in zip(st.columns(3), rows):
+        col.markdown(_stage_html(row, tones[row["key"]]), unsafe_allow_html=True)
+    st.caption(summary)
+
+
 def render_crews(plan: dict, changes: dict | None, out_crew: int | None) -> None:
     moved = {m["id"] for m in (changes or {}).get("moved", [])}
     cols = st.columns(4)
@@ -434,6 +478,8 @@ st.caption("Calgary Roads · 8 crews × 5 jobs · priority agent vs oldest-first
            "frozen sample of 200 Open Calgary 311 tickets (Aug 25–27, 2026), planned for Aug 28, 2026")
 if data["fake"]:
     st.warning("Showing sample data: run `python -m dispatch.run` to generate dispatch/outputs/.")
+
+render_improvement(metrics)
 
 views = ["Agent", "FIFO"] + (["Agent - noon"] if ss.noon and "plan" in ss.noon else [])
 if ss.get("view") not in views:

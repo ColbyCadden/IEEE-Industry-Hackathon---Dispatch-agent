@@ -1,0 +1,9 @@
+<edges><edge id="Nin" from="N" to="c" numLanes="1" speed="13.89"/>
+<edge id="Nout" from="c" to="N" numLanes="1" speed="13.89"/>
+<edge id="Sin" from="S" to="c" numLanes="1" speed="13.89"/>
+<edge id="Sout" from="c" to="S" numLanes="1" speed="13.89"/>
+<edge id="Ein" from="E" to="c" numLanes="1" speed="13.89"/>
+<edge id="Eout" from="c" to="E" numLanes="1" speed="13.89"/>
+<edge id="Win" from="W" to="c" numLanes="1" speed="13.89"/>
+<edge id="Wout" from="c" to="W" numLanes="1" speed="13.89"/>
+</edges>

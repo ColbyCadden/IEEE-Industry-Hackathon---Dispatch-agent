@@ -1,0 +1,75 @@
+{
+  "fetched_at": "2026-10-03T16:48:07.172256+00:00",
+  "scout": {
+    "ok": true,
+    "per_category": {
+      "pothole": {
+        "fetched": 442,
+        "in_network": 15
+      },
+      "debris": {
+        "fetched": 739,
+        "in_network": 49
+      },
+      "sign": {
+        "fetched": 1049,
+        "in_network": 116
+      },
+      "signal": {
+        "fetched": 1011,
+        "in_network": 42
+      },
+      "trash": {
+        "fetched": 0,
+        "in_network": 0
+      },
+      "street_cleaning": {
+        "fetched": 0,
+        "in_network": 0
+      },
+      "dead_animal": {
+        "fetched": 806,
+        "in_network": 20
+      },
+      "sidewalk_curb": {
+        "fetched": 2,
+        "in_network": 0
+      },
+      "road_maintenance": {
+        "fetched": 1211,
+        "in_network": 15
+      },
+      "markings": {
+        "fetched": 75,
+        "in_network": 3
+      },
+      "snow_ice": {
+        "fetched": 0,
+        "in_network": 0
+      }
+    }
+  },
+  "analyst": {
+    "ok": true,
+    "total_rows": 200,
+    "per_category": {
+      "pothole": {
+        "fetched": 36,
+        "in_network": 0
+      },
+      "trash": {
+        "fetched": 57,
+        "in_network": 0
+      },
+      "sign": {
+        "fetched": 32,
+        "in_network": 2
+      },
+      "debris": {
+        "fetched": 33,
+        "in_network": 3
+      }
+    }
+  },
+  "rows_in_sim_area": 265
+}

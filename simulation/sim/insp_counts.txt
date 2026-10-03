@@ -1,0 +1,12 @@
+import csv, collections, sys, os
+r = list(csv.DictReader(open('counts_current.csv')))
+print(len(r), r[-1])
+t = collections.Counter()
+for x in r: t[x['approach']] += int(x['count'])
+print(t)
+ts = sorted({x['interval_start'] for x in r})
+print(len(ts), ts[0], ts[-1])
+bad = [x for x in r if not x['count'].isdigit()]
+print('bad', bad[:5])
+d = os.path.join(sys.prefix, 'Scripts')
+print(d, [f for f in os.listdir(d) if 'sumo' in f.lower() or 'netconvert' in f.lower()])

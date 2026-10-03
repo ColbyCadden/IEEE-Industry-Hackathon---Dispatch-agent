@@ -1,0 +1,6 @@
+<configuration>
+  <input><net-file value="dt.net.xml"/><route-files value="dt.rou.xml"/><additional-files value="dt.poly.xml"/></input>
+  <time><begin value="0"/><end value="3600"/></time>
+  <processing><ignore-route-errors value="true"/><time-to-teleport value="120"/></processing>
+  <report><no-warnings value="true"/></report>
+</configuration>

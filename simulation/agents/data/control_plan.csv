@@ -1,0 +1,558 @@
+edge_id,road_name,pressure,delay_min,volume,sources,action,target_speed_kph,notes
+491678228#0,MACLEOD TRAIL SE,0.9332,7.0,61849,travel_times|traffic_counts|incidents,close,46.7,saturated; divert traffic
+254577639#1,MACLEOD TRAIL SE,0.9332,7.0,61849,travel_times|traffic_counts|incidents,close,46.7,saturated; divert traffic
+135678690#1,MACLEOD TRAIL SE,0.9332,7.0,61849,travel_times|traffic_counts|incidents,close,46.7,saturated; divert traffic
+254577638#1,MACLEOD TRAIL SE,0.9332,7.0,61849,travel_times|traffic_counts|incidents,close,46.7,saturated; divert traffic
+1463656916#0,MACLEOD TRAIL SE,0.9332,7.0,61849,travel_times|traffic_counts|incidents,close,46.7,saturated; divert traffic
+468730823#3,MACLEOD TRAIL SE,0.9332,7.0,61849,travel_times|traffic_counts|incidents,close,46.7,saturated; divert traffic
+491678227,MACLEOD TRAIL SE,0.9332,7.0,61849,travel_times|traffic_counts|incidents,close,46.7,saturated; divert traffic
+1463656916#7,MACLEOD TRAIL SE,0.9332,7.0,61849,travel_times|traffic_counts|incidents,close,46.7,saturated; divert traffic
+132058304#0,MACLEOD TRAIL SE,0.9332,7.0,61849,travel_times|traffic_counts|incidents,close,46.7,saturated; divert traffic
+196550929#0,MACLEOD TRAIL SE,0.9332,7.0,61849,travel_times|traffic_counts|incidents,close,46.7,saturated; divert traffic
+467465588#0,MACLEOD TRAIL SE,0.9332,7.0,61849,travel_times|traffic_counts|incidents,close,46.7,saturated; divert traffic
+1463656916#2,MACLEOD TRAIL SE,0.9332,7.0,61849,travel_times|traffic_counts|incidents,close,46.7,saturated; divert traffic
+1463656910#1,MACLEOD TRAIL SE,0.9332,7.0,61849,travel_times|traffic_counts|incidents,close,46.7,saturated; divert traffic
+468730824#1,MACLEOD TRAIL SE,0.9332,7.0,61849,travel_times|traffic_counts|incidents,close,46.7,saturated; divert traffic
+491678228#1,MACLEOD TRAIL SE,0.9332,7.0,61849,travel_times|traffic_counts|incidents,close,46.7,saturated; divert traffic
+196471986#0,MACLEOD TRAIL SE,0.9332,7.0,61849,travel_times|traffic_counts|incidents,close,46.7,saturated; divert traffic
+1270789367#1,MACLEOD TRAIL SE,0.9332,7.0,61849,travel_times|traffic_counts|incidents,close,46.7,saturated; divert traffic
+1463656916#3,MACLEOD TRAIL SE,0.9332,7.0,61849,travel_times|traffic_counts|incidents,close,46.7,saturated; divert traffic
+1185630532#2,MACLEOD TRAIL SE,0.9332,7.0,61849,travel_times|traffic_counts|incidents,close,46.7,saturated; divert traffic
+1271171355#1,MACLEOD TRAIL SE,0.9332,7.0,61849,travel_times|traffic_counts|incidents,close,46.7,saturated; divert traffic
+254577637#0,MACLEOD TRAIL SE,0.9332,7.0,61849,travel_times|traffic_counts|incidents,close,46.7,saturated; divert traffic
+1463656916#5,MACLEOD TRAIL SE,0.9332,7.0,61849,travel_times|traffic_counts|incidents,close,46.7,saturated; divert traffic
+1463656916#6,MACLEOD TRAIL SE,0.9332,7.0,61849,travel_times|traffic_counts|incidents,close,46.7,saturated; divert traffic
+31973502#1,MACLEOD TRAIL SE,0.9332,7.0,61849,travel_times|traffic_counts|incidents,close,46.7,saturated; divert traffic
+-203177437#2,CENTRE STREET S,0.7821,3.0,23600,travel_times|traffic_counts|incidents,signal_priority,39.1,green bonus 1.00
+467412728#2,CENTRE STREET S,0.7821,3.0,23600,travel_times|traffic_counts|incidents,signal_priority,39.1,green bonus 1.00
+141106321#2,CENTRE STREET S,0.7821,3.0,23600,travel_times|traffic_counts|incidents,signal_priority,39.1,green bonus 1.00
+-1463656918#7,CENTRE STREET S,0.7821,3.0,23600,travel_times|traffic_counts|incidents,signal_priority,39.1,green bonus 1.00
+-23278053#4,CENTRE STREET S,0.7821,3.0,23600,travel_times|traffic_counts|incidents,signal_priority,39.1,green bonus 1.00
+23278053#7,CENTRE STREET S,0.7821,3.0,23600,travel_times|traffic_counts|incidents,signal_priority,39.1,green bonus 1.00
+420831925#6,CENTRE STREET S,0.7821,3.0,23600,travel_times|traffic_counts|incidents,signal_priority,39.1,green bonus 1.00
+-141106321#2,CENTRE STREET S,0.7821,3.0,23600,travel_times|traffic_counts|incidents,signal_priority,39.1,green bonus 1.00
+32547888#2,CENTRE STREET S,0.7821,3.0,23600,travel_times|traffic_counts|incidents,signal_priority,39.1,green bonus 1.00
+467443785#0,CENTRE STREET S,0.7821,3.0,23600,travel_times|traffic_counts|incidents,signal_priority,39.1,green bonus 1.00
+1463656918#0,CENTRE STREET S,0.7821,3.0,23600,travel_times|traffic_counts|incidents,signal_priority,39.1,green bonus 1.00
+203177437#2,CENTRE STREET S,0.7821,3.0,23600,travel_times|traffic_counts|incidents,signal_priority,39.1,green bonus 1.00
+-23278053#7,CENTRE STREET S,0.7821,3.0,23600,travel_times|traffic_counts|incidents,signal_priority,39.1,green bonus 1.00
+-420831925#6,CENTRE STREET S,0.7821,3.0,23600,travel_times|traffic_counts|incidents,signal_priority,39.1,green bonus 1.00
+-467412728#2,CENTRE STREET S,0.7821,3.0,23600,travel_times|traffic_counts|incidents,signal_priority,39.1,green bonus 1.00
+-32547888#3,CENTRE STREET S,0.7821,3.0,23600,travel_times|traffic_counts|incidents,signal_priority,39.1,green bonus 1.00
+467443785#2,CENTRE STREET S,0.7821,3.0,23600,travel_times|traffic_counts|incidents,signal_priority,39.1,green bonus 1.00
+468684738#2,CENTRE STREET S,0.7821,3.0,23600,travel_times|traffic_counts|incidents,signal_priority,39.1,green bonus 1.00
+420831925#2,CENTRE STREET S,0.7821,3.0,23600,travel_times|traffic_counts|incidents,signal_priority,39.1,green bonus 1.00
+-23278053#5,CENTRE STREET S,0.7821,3.0,23600,travel_times|traffic_counts|incidents,signal_priority,39.1,green bonus 1.00
+-1463656918#2,CENTRE STREET S,0.7821,3.0,23600,travel_times|traffic_counts|incidents,signal_priority,39.1,green bonus 1.00
+-420831925#3,CENTRE STREET S,0.7821,3.0,23600,travel_times|traffic_counts|incidents,signal_priority,39.1,green bonus 1.00
+32547688#2,CENTRE STREET S,0.7821,3.0,23600,travel_times|traffic_counts|incidents,signal_priority,39.1,green bonus 1.00
+23278053#5,CENTRE STREET S,0.7821,3.0,23600,travel_times|traffic_counts|incidents,signal_priority,39.1,green bonus 1.00
+-467443785#3,CENTRE STREET S,0.7821,3.0,23600,travel_times|traffic_counts|incidents,signal_priority,39.1,green bonus 1.00
+467443785#5,CENTRE STREET S,0.7821,3.0,23600,travel_times|traffic_counts|incidents,signal_priority,39.1,green bonus 1.00
+-32547688#0,CENTRE STREET S,0.7821,3.0,23600,travel_times|traffic_counts|incidents,signal_priority,39.1,green bonus 1.00
+32547688#0,CENTRE STREET S,0.7821,3.0,23600,travel_times|traffic_counts|incidents,signal_priority,39.1,green bonus 1.00
+23278053#2,CENTRE STREET S,0.7821,3.0,23600,travel_times|traffic_counts|incidents,signal_priority,39.1,green bonus 1.00
+-467443785#0,CENTRE STREET S,0.7821,3.0,23600,travel_times|traffic_counts|incidents,signal_priority,39.1,green bonus 1.00
+-420831925#0,CENTRE STREET S,0.7821,3.0,23600,travel_times|traffic_counts|incidents,signal_priority,39.1,green bonus 1.00
+-32547688#2,CENTRE STREET S,0.7821,3.0,23600,travel_times|traffic_counts|incidents,signal_priority,39.1,green bonus 1.00
+-141106321#0,CENTRE STREET S,0.7821,3.0,23600,travel_times|traffic_counts|incidents,signal_priority,39.1,green bonus 1.00
+1463656918#7,CENTRE STREET S,0.7821,3.0,23600,travel_times|traffic_counts|incidents,signal_priority,39.1,green bonus 1.00
+31973701#1,3 STREET SW,0.6942,0.0,32023,traffic_counts|incidents,signal_priority,34.7,green bonus 1.00
+127734687#0,3 STREET SW,0.6942,0.0,32023,traffic_counts|incidents,signal_priority,34.7,green bonus 1.00
+1423617130#1,3 STREET SW,0.6942,0.0,32023,traffic_counts|incidents,signal_priority,34.7,green bonus 1.00
+259672390#7,3 AVENUE SW,0.6942,0.0,32023,traffic_counts|incidents,signal_priority,34.7,green bonus 1.00
+-204201294#7,3 AVENUE SW,0.6942,0.0,32023,traffic_counts|incidents,signal_priority,34.7,green bonus 1.00
+127734688#2,3 STREET SW,0.6942,0.0,32023,traffic_counts|incidents,signal_priority,34.7,green bonus 1.00
+1423617130#2,3 STREET SW,0.6942,0.0,32023,traffic_counts|incidents,signal_priority,34.7,green bonus 1.00
+12102993#0,3 AVENUE SW,0.6942,0.0,32023,traffic_counts|incidents,signal_priority,34.7,green bonus 1.00
+204201292#2,3 AVENUE SW,0.6942,0.0,32023,traffic_counts|incidents,signal_priority,34.7,green bonus 1.00
+-8036203#2,3 STREET SW,0.6942,0.0,32023,traffic_counts|incidents,signal_priority,34.7,green bonus 1.00
+222032504#2,3 AVENUE SW,0.6942,0.0,32023,traffic_counts|incidents,signal_priority,34.7,green bonus 1.00
+-8036203#0,3 STREET SW,0.6942,0.0,32023,traffic_counts|incidents,signal_priority,34.7,green bonus 1.00
+31973701#6,3 STREET SW,0.6942,0.0,32023,traffic_counts|incidents,signal_priority,34.7,green bonus 1.00
+19165395#2,3 AVENUE SE,0.6942,0.0,32023,traffic_counts|incidents,signal_priority,34.7,green bonus 1.00
+31973701#8,3 STREET SW,0.6942,0.0,32023,traffic_counts|incidents,signal_priority,34.7,green bonus 1.00
+-19165395#9,3 AVENUE SE,0.6942,0.0,32023,traffic_counts|incidents,signal_priority,34.7,green bonus 1.00
+-259672390#11,3 AVENUE SW,0.6942,0.0,32023,traffic_counts|incidents,signal_priority,34.7,green bonus 1.00
+127734688#0,3 STREET SW,0.6942,0.0,32023,traffic_counts|incidents,signal_priority,34.7,green bonus 1.00
+204201294#2,3 AVENUE SW,0.6942,0.0,32023,traffic_counts|incidents,signal_priority,34.7,green bonus 1.00
+127734688#3,3 STREET SW,0.6942,0.0,32023,traffic_counts|incidents,signal_priority,34.7,green bonus 1.00
+31973701#12,3 STREET SW,0.6942,0.0,32023,traffic_counts|incidents,signal_priority,34.7,green bonus 1.00
+8036203#0,3 STREET SW,0.6942,0.0,32023,traffic_counts|incidents,signal_priority,34.7,green bonus 1.00
+-8036203#7,3 STREET SW,0.6942,0.0,32023,traffic_counts|incidents,signal_priority,34.7,green bonus 1.00
+31973701#10,3 STREET SW,0.6942,0.0,32023,traffic_counts|incidents,signal_priority,34.7,green bonus 1.00
+8036203#7,3 STREET SW,0.6942,0.0,32023,traffic_counts|incidents,signal_priority,34.7,green bonus 1.00
+-259672390#2,3 AVENUE SW,0.6942,0.0,32023,traffic_counts|incidents,signal_priority,34.7,green bonus 1.00
+127734688#1,3 STREET SW,0.6942,0.0,32023,traffic_counts|incidents,signal_priority,34.7,green bonus 1.00
+1423617130#0,3 STREET SW,0.6942,0.0,32023,traffic_counts|incidents,signal_priority,34.7,green bonus 1.00
+4822225#4,3 AVENUE SW,0.6942,0.0,32023,traffic_counts|incidents,signal_priority,34.7,green bonus 1.00
+4822225#0,3 AVENUE SW,0.6942,0.0,32023,traffic_counts|incidents,signal_priority,34.7,green bonus 1.00
+127734688#4,3 STREET SW,0.6942,0.0,32023,traffic_counts|incidents,signal_priority,34.7,green bonus 1.00
+-204201292#5,3 AVENUE SW,0.6942,0.0,32023,traffic_counts|incidents,signal_priority,34.7,green bonus 1.00
+-259672387#3,3 AVENUE SW,0.6942,0.0,32023,traffic_counts|incidents,signal_priority,34.7,green bonus 1.00
+259672387#2,3 AVENUE SW,0.6942,0.0,32023,traffic_counts|incidents,signal_priority,34.7,green bonus 1.00
+8036203#2,3 STREET SW,0.6942,0.0,32023,traffic_counts|incidents,signal_priority,34.7,green bonus 1.00
+259672390#2,3 AVENUE SW,0.6942,0.0,32023,traffic_counts|incidents,signal_priority,34.7,green bonus 1.00
+31973701#9,3 STREET SW,0.6942,0.0,32023,traffic_counts|incidents,signal_priority,34.7,green bonus 1.00
+-222032504#3,3 AVENUE SW,0.6942,0.0,32023,traffic_counts|incidents,signal_priority,34.7,green bonus 1.00
+173275813#1,11 AVENUE SE,0.6762,0.0,22656,traffic_counts|incidents,signal_priority,33.8,green bonus 1.00
+807915577#4,11 AVENUE SW,0.6762,0.0,22656,traffic_counts|incidents,signal_priority,33.8,green bonus 1.00
+166790921#4,11 AVENUE SW,0.6762,0.0,22656,traffic_counts|incidents,signal_priority,33.8,green bonus 1.00
+1463656912#0,11 AVENUE SE,0.6762,0.0,22656,traffic_counts|incidents,signal_priority,33.8,green bonus 1.00
+1269812662#1,11 AVENUE SW,0.6762,0.0,22656,traffic_counts|incidents,signal_priority,33.8,green bonus 1.00
+166790921#0,11 AVENUE SW,0.6762,0.0,22656,traffic_counts|incidents,signal_priority,33.8,green bonus 1.00
+166790921#12,11 AVENUE SW,0.6762,0.0,22656,traffic_counts|incidents,signal_priority,33.8,green bonus 1.00
+1269812661#1,11 AVENUE SW,0.6762,0.0,22656,traffic_counts|incidents,signal_priority,33.8,green bonus 1.00
+1409499802#1,11 AVENUE SW,0.6762,0.0,22656,traffic_counts|incidents,signal_priority,33.8,green bonus 1.00
+166790921#10,11 AVENUE SW,0.6762,0.0,22656,traffic_counts|incidents,signal_priority,33.8,green bonus 1.00
+173275813#0,11 AVENUE SE,0.6762,0.0,22656,traffic_counts|incidents,signal_priority,33.8,green bonus 1.00
+166789715#6,11 AVENUE SW,0.6762,0.0,22656,traffic_counts|incidents,signal_priority,33.8,green bonus 1.00
+807915577#0,11 AVENUE SW,0.6762,0.0,22656,traffic_counts|incidents,signal_priority,33.8,green bonus 1.00
+166789715#1,11 AVENUE SW,0.6762,0.0,22656,traffic_counts|incidents,signal_priority,33.8,green bonus 1.00
+4609140#1,11 AVENUE SE,0.6762,0.0,22656,traffic_counts|incidents,signal_priority,33.8,green bonus 1.00
+12100756#1,11 AVENUE SW,0.6762,0.0,22656,traffic_counts|incidents,signal_priority,33.8,green bonus 1.00
+807915577#11,11 AVENUE SW,0.6762,0.0,22656,traffic_counts|incidents,signal_priority,33.8,green bonus 1.00
+166790921#9,11 AVENUE SW,0.6762,0.0,22656,traffic_counts|incidents,signal_priority,33.8,green bonus 1.00
+166790921#11,11 AVENUE SW,0.6762,0.0,22656,traffic_counts|incidents,signal_priority,33.8,green bonus 1.00
+141116806#0,12 AVENUE SW,0.672,0.0,20900,travel_times|traffic_counts|incidents,signal_priority,33.6,green bonus 1.00
+1463656925#1,12 AVENUE SE,0.672,0.0,20900,travel_times|traffic_counts|incidents,signal_priority,33.6,green bonus 1.00
+351515865#0,12 AVENUE SW,0.672,0.0,20900,travel_times|traffic_counts|incidents,signal_priority,33.6,green bonus 1.00
+1272983205#1,12 AVENUE SW,0.672,0.0,20900,travel_times|traffic_counts|incidents,signal_priority,33.6,green bonus 1.00
+1272726821#0,12 AVENUE SE,0.672,0.0,20900,travel_times|traffic_counts|incidents,signal_priority,33.6,green bonus 1.00
+511579309#1,12 AVENUE SW,0.672,0.0,20900,travel_times|traffic_counts|incidents,signal_priority,33.6,green bonus 1.00
+141116818#2,12 AVENUE SW,0.672,0.0,20900,travel_times|traffic_counts|incidents,signal_priority,33.6,green bonus 1.00
+1272983206#0,12 AVENUE SW,0.672,0.0,20900,travel_times|traffic_counts|incidents,signal_priority,33.6,green bonus 1.00
+1273254692#1,12 AVENUE SW,0.672,0.0,20900,travel_times|traffic_counts|incidents,signal_priority,33.6,green bonus 1.00
+166789702#1,12 AVENUE SW,0.672,0.0,20900,travel_times|traffic_counts|incidents,signal_priority,33.6,green bonus 1.00
+1273252488#1,12 AVENUE SW,0.672,0.0,20900,travel_times|traffic_counts|incidents,signal_priority,33.6,green bonus 1.00
+1272983203#0,12 AVENUE SW,0.672,0.0,20900,travel_times|traffic_counts|incidents,signal_priority,33.6,green bonus 1.00
+166789702#7,12 AVENUE SW,0.672,0.0,20900,travel_times|traffic_counts|incidents,signal_priority,33.6,green bonus 1.00
+601801149#0,12 AVENUE SE,0.672,0.0,20900,travel_times|traffic_counts|incidents,signal_priority,33.6,green bonus 1.00
+601801149#4,12 AVENUE SE,0.672,0.0,20900,travel_times|traffic_counts|incidents,signal_priority,33.6,green bonus 1.00
+259751121#1,12 AVENUE SE,0.672,0.0,20900,travel_times|traffic_counts|incidents,signal_priority,33.6,green bonus 1.00
+1273254690,12 AVENUE SW,0.672,0.0,20900,travel_times|traffic_counts|incidents,signal_priority,33.6,green bonus 1.00
+198464177#0,7 STREET SW,0.6694,2.0,19870,travel_times|traffic_counts|incidents,signal_priority,33.5,green bonus 1.00
+-163317177#6,7 STREET SW,0.6694,2.0,19870,travel_times|traffic_counts|incidents,signal_priority,33.5,green bonus 1.00
+-1273252486#4,7 STREET SW,0.6694,2.0,19870,travel_times|traffic_counts|incidents,signal_priority,33.5,green bonus 1.00
+79785541#0,7 STREET SW,0.6694,2.0,19870,travel_times|traffic_counts|incidents,signal_priority,33.5,green bonus 1.00
+1273252486#9,7 STREET SW,0.6694,2.0,19870,travel_times|traffic_counts|incidents,signal_priority,33.5,green bonus 1.00
+32000793#1,7 STREET SW,0.6694,2.0,19870,travel_times|traffic_counts|incidents,signal_priority,33.5,green bonus 1.00
+163317177#0,7 STREET SW,0.6694,2.0,19870,travel_times|traffic_counts|incidents,signal_priority,33.5,green bonus 1.00
+163317177#7,7 STREET SW,0.6694,2.0,19870,travel_times|traffic_counts|incidents,signal_priority,33.5,green bonus 1.00
+163317177#4,7 STREET SW,0.6694,2.0,19870,travel_times|traffic_counts|incidents,signal_priority,33.5,green bonus 1.00
+357501305#3,7 STREET SW,0.6694,2.0,19870,travel_times|traffic_counts|incidents,signal_priority,33.5,green bonus 1.00
+1273252486#3,7 STREET SW,0.6694,2.0,19870,travel_times|traffic_counts|incidents,signal_priority,33.5,green bonus 1.00
+140445153#1,7 STREET SW,0.6694,2.0,19870,travel_times|traffic_counts|incidents,signal_priority,33.5,green bonus 1.00
+357501305#1,7 STREET SW,0.6694,2.0,19870,travel_times|traffic_counts|incidents,signal_priority,33.5,green bonus 1.00
+163317177#2,7 STREET SW,0.6694,2.0,19870,travel_times|traffic_counts|incidents,signal_priority,33.5,green bonus 1.00
+-163317177#2,7 STREET SW,0.6694,2.0,19870,travel_times|traffic_counts|incidents,signal_priority,33.5,green bonus 1.00
+-163317177#9,7 STREET SW,0.6694,2.0,19870,travel_times|traffic_counts|incidents,signal_priority,33.5,green bonus 1.00
+-1273252486#11,7 STREET SW,0.6694,2.0,19870,travel_times|traffic_counts|incidents,signal_priority,33.5,green bonus 1.00
+-163317177#0,7 STREET SW,0.6694,2.0,19870,travel_times|traffic_counts|incidents,signal_priority,33.5,green bonus 1.00
+140445170#6,7 STREET SW,0.6694,2.0,19870,travel_times|traffic_counts|incidents,signal_priority,33.5,green bonus 1.00
+-259670327#5,10 AVENUE SE,0.6581,0.0,15982,traffic_counts|incidents,signal_priority,32.9,green bonus 1.00
+1218664354#0,10 AVENUE SW,0.6581,0.0,15982,traffic_counts|incidents,signal_priority,32.9,green bonus 1.00
+494158909#10,10 AVENUE SW,0.6581,0.0,15982,traffic_counts|incidents,signal_priority,32.9,green bonus 1.00
+-494158908#5,10 AVENUE SW,0.6581,0.0,15982,traffic_counts|incidents,signal_priority,32.9,green bonus 1.00
+-494157927#2,10 AVENUE SW,0.6581,0.0,15982,traffic_counts|incidents,signal_priority,32.9,green bonus 1.00
+-32548512#3,10 AVENUE SE,0.6581,0.0,15982,traffic_counts|incidents,signal_priority,32.9,green bonus 1.00
+-32548512#9,10 AVENUE SE,0.6581,0.0,15982,traffic_counts|incidents,signal_priority,32.9,green bonus 1.00
+259670327#2,10 AVENUE SE,0.6581,0.0,15982,traffic_counts|incidents,signal_priority,32.9,green bonus 1.00
+32548512#0,10 AVENUE SE,0.6581,0.0,15982,traffic_counts|incidents,signal_priority,32.9,green bonus 1.00
+-494157927#0,10 AVENUE SW,0.6581,0.0,15982,traffic_counts|incidents,signal_priority,32.9,green bonus 1.00
+-203406186#6,10 AVENUE SW,0.6581,0.0,15982,traffic_counts|incidents,signal_priority,32.9,green bonus 1.00
+467442107#2,10 AVENUE SW,0.6581,0.0,15982,traffic_counts|incidents,signal_priority,32.9,green bonus 1.00
+32000911,10 STREET SW,0.6581,0.0,15982,traffic_counts|incidents,signal_priority,32.9,green bonus 1.00
+494158909#0,10 AVENUE SW,0.6581,0.0,15982,traffic_counts|incidents,signal_priority,32.9,green bonus 1.00
+-494157926#5,10 AVENUE SW,0.6581,0.0,15982,traffic_counts|incidents,signal_priority,32.9,green bonus 1.00
+-467442107#7,10 AVENUE SW,0.6581,0.0,15982,traffic_counts|incidents,signal_priority,32.9,green bonus 1.00
+-502712724#0,10 AVENUE SW,0.6581,0.0,15982,traffic_counts|incidents,signal_priority,32.9,green bonus 1.00
+494157927#5,10 AVENUE SW,0.6581,0.0,15982,traffic_counts|incidents,signal_priority,32.9,green bonus 1.00
+-494157927#3,10 AVENUE SW,0.6581,0.0,15982,traffic_counts|incidents,signal_priority,32.9,green bonus 1.00
+-19164932,10 STREET SW,0.6581,0.0,15982,traffic_counts|incidents,signal_priority,32.9,green bonus 1.00
+-203406186#12,10 AVENUE SW,0.6581,0.0,15982,traffic_counts|incidents,signal_priority,32.9,green bonus 1.00
+-494158909#15,10 AVENUE SW,0.6581,0.0,15982,traffic_counts|incidents,signal_priority,32.9,green bonus 1.00
+203406186#11,10 AVENUE SW,0.6581,0.0,15982,traffic_counts|incidents,signal_priority,32.9,green bonus 1.00
+494157927#3,10 AVENUE SW,0.6581,0.0,15982,traffic_counts|incidents,signal_priority,32.9,green bonus 1.00
+-494158909#5,10 AVENUE SW,0.6581,0.0,15982,traffic_counts|incidents,signal_priority,32.9,green bonus 1.00
+-494158908#2,10 AVENUE SW,0.6581,0.0,15982,traffic_counts|incidents,signal_priority,32.9,green bonus 1.00
+32548512#6,10 AVENUE SE,0.6581,0.0,15982,traffic_counts|incidents,signal_priority,32.9,green bonus 1.00
+494158908#3,10 AVENUE SW,0.6581,0.0,15982,traffic_counts|incidents,signal_priority,32.9,green bonus 1.00
+494157926#2,10 AVENUE SW,0.6581,0.0,15982,traffic_counts|incidents,signal_priority,32.9,green bonus 1.00
+203406186#1,10 AVENUE SW,0.6581,0.0,15982,traffic_counts|incidents,signal_priority,32.9,green bonus 1.00
+494157927#2,10 AVENUE SW,0.6581,0.0,15982,traffic_counts|incidents,signal_priority,32.9,green bonus 1.00
+494158908#2,10 AVENUE SW,0.6581,0.0,15982,traffic_counts|incidents,signal_priority,32.9,green bonus 1.00
+555858219#4,2 STREET SW,0.6375,0.0,10766,traffic_counts|incidents,signal_priority,31.9,green bonus 1.00
+1056925882#12,2 STREET SW,0.6375,0.0,10766,traffic_counts|incidents,signal_priority,31.9,green bonus 1.00
+196602549#2,2 STREET SW,0.6375,0.0,10766,traffic_counts|incidents,signal_priority,31.9,green bonus 1.00
+31973645#2,2 STREET SW,0.6375,0.0,10766,traffic_counts|incidents,signal_priority,31.9,green bonus 1.00
+555858219#5,2 STREET SW,0.6375,0.0,10766,traffic_counts|incidents,signal_priority,31.9,green bonus 1.00
+132058039#2,2 STREET SW,0.6375,0.0,10766,traffic_counts|incidents,signal_priority,31.9,green bonus 1.00
+198107931#1,2 STREET SW,0.6375,0.0,10766,traffic_counts|incidents,signal_priority,31.9,green bonus 1.00
+458208414#0,2 STREET SW,0.6375,0.0,10766,traffic_counts|incidents,signal_priority,31.9,green bonus 1.00
+1056925882#7,2 STREET SW,0.6375,0.0,10766,traffic_counts|incidents,signal_priority,31.9,green bonus 1.00
+-204201273#4,2 STREET SW,0.6375,0.0,10766,traffic_counts|incidents,signal_priority,31.9,green bonus 1.00
+-204201273#2,2 STREET SW,0.6375,0.0,10766,traffic_counts|incidents,signal_priority,31.9,green bonus 1.00
+31973645#1,2 STREET SW,0.6375,0.0,10766,traffic_counts|incidents,signal_priority,31.9,green bonus 1.00
+204201273#4,2 STREET SW,0.6375,0.0,10766,traffic_counts|incidents,signal_priority,31.9,green bonus 1.00
+458205427#1,2 STREET SW,0.6375,0.0,10766,traffic_counts|incidents,signal_priority,31.9,green bonus 1.00
+1056925882#2,2 STREET SW,0.6375,0.0,10766,traffic_counts|incidents,signal_priority,31.9,green bonus 1.00
+458208414#1,2 STREET SW,0.6375,0.0,10766,traffic_counts|incidents,signal_priority,31.9,green bonus 1.00
+196602549#0,2 STREET SW,0.6375,0.0,10766,traffic_counts|incidents,signal_priority,31.9,green bonus 1.00
+-196602549#0,2 STREET SW,0.6375,0.0,10766,traffic_counts|incidents,signal_priority,31.9,green bonus 1.00
+-1056925882#11,2 STREET SW,0.6375,0.0,10766,traffic_counts|incidents,signal_priority,31.9,green bonus 1.00
+-196602549#8,2 STREET SW,0.6375,0.0,10766,traffic_counts|incidents,signal_priority,31.9,green bonus 1.00
+458208414#3,2 STREET SW,0.6375,0.0,10766,traffic_counts|incidents,signal_priority,31.9,green bonus 1.00
+-1056925882#2,2 STREET SW,0.6375,0.0,10766,traffic_counts|incidents,signal_priority,31.9,green bonus 1.00
+-1056925882#12,2 STREET SW,0.6375,0.0,10766,traffic_counts|incidents,signal_priority,31.9,green bonus 1.00
+196602549#7,2 STREET SW,0.6375,0.0,10766,traffic_counts|incidents,signal_priority,31.9,green bonus 1.00
+-196602549#2,2 STREET SW,0.6375,0.0,10766,traffic_counts|incidents,signal_priority,31.9,green bonus 1.00
+458208414#4,2 STREET SW,0.6375,0.0,10766,traffic_counts|incidents,signal_priority,31.9,green bonus 1.00
+196602549#1,2 STREET SW,0.6375,0.0,10766,traffic_counts|incidents,signal_priority,31.9,green bonus 1.00
+-196602549#1,2 STREET SW,0.6375,0.0,10766,traffic_counts|incidents,signal_priority,31.9,green bonus 1.00
+-132058039#2,2 STREET SW,0.6375,0.0,10766,traffic_counts|incidents,signal_priority,31.9,green bonus 1.00
+31973645#0,2 STREET SW,0.6375,0.0,10766,traffic_counts|incidents,signal_priority,31.9,green bonus 1.00
+458205427#0,2 STREET SW,0.6375,0.0,10766,traffic_counts|incidents,signal_priority,31.9,green bonus 1.00
+204201273#2,2 STREET SW,0.6375,0.0,10766,traffic_counts|incidents,signal_priority,31.9,green bonus 1.00
+-1270794199#7,13 AVENUE SW,0.6367,0.0,10598,traffic_counts|incidents,signal_priority,31.8,green bonus 1.00
+172360433#17,13 AVENUE SW,0.6367,0.0,10598,traffic_counts|incidents,signal_priority,31.8,green bonus 1.00
+-172360433#16,13 AVENUE SW,0.6367,0.0,10598,traffic_counts|incidents,signal_priority,31.8,green bonus 1.00
+-12100760#3,13 AVENUE SW,0.6367,0.0,10598,traffic_counts|incidents,signal_priority,31.8,green bonus 1.00
+-172360433#8,13 AVENUE SW,0.6367,0.0,10598,traffic_counts|incidents,signal_priority,31.8,green bonus 1.00
+172360433#24,13 AVENUE SW,0.6367,0.0,10598,traffic_counts|incidents,signal_priority,31.8,green bonus 1.00
+172360433#12,13 AVENUE SW,0.6367,0.0,10598,traffic_counts|incidents,signal_priority,31.8,green bonus 1.00
+172360433#15,13 AVENUE SW,0.6367,0.0,10598,traffic_counts|incidents,signal_priority,31.8,green bonus 1.00
+172360433#2,13 AVENUE SW,0.6367,0.0,10598,traffic_counts|incidents,signal_priority,31.8,green bonus 1.00
+-172360433#28,13 AVENUE SW,0.6367,0.0,10598,traffic_counts|incidents,signal_priority,31.8,green bonus 1.00
+-1270794199#5,13 AVENUE SW,0.6367,0.0,10598,traffic_counts|incidents,signal_priority,31.8,green bonus 1.00
+1270794199#0,13 AVENUE SW,0.6367,0.0,10598,traffic_counts|incidents,signal_priority,31.8,green bonus 1.00
+-172360433#3,13 AVENUE SW,0.6367,0.0,10598,traffic_counts|incidents,signal_priority,31.8,green bonus 1.00
+-457364825#6,13 AVENUE SW,0.6367,0.0,10598,traffic_counts|incidents,signal_priority,31.8,green bonus 1.00
+-172360433#14,13 AVENUE SW,0.6367,0.0,10598,traffic_counts|incidents,signal_priority,31.8,green bonus 1.00
+12100760#0,13 AVENUE SW,0.6367,0.0,10598,traffic_counts|incidents,signal_priority,31.8,green bonus 1.00
+-172360433#23,13 AVENUE SW,0.6367,0.0,10598,traffic_counts|incidents,signal_priority,31.8,green bonus 1.00
+457364825#2,13 AVENUE SW,0.6367,0.0,10598,traffic_counts|incidents,signal_priority,31.8,green bonus 1.00
+1270794199#6,13 AVENUE SW,0.6367,0.0,10598,traffic_counts|incidents,signal_priority,31.8,green bonus 1.00
+172360433#4,13 AVENUE SW,0.6367,0.0,10598,traffic_counts|incidents,signal_priority,31.8,green bonus 1.00
+-181527106#0,RIVERFRONT AVENUE SE,0.6323,0.0,9723,traffic_counts|incidents,signal_priority,31.6,green bonus 1.00
+243484113,RIVERFRONT AVENUE SE,0.6323,0.0,9723,traffic_counts|incidents,signal_priority,31.6,green bonus 1.00
+181527106#0,RIVERFRONT AVENUE SE,0.6323,0.0,9723,traffic_counts|incidents,signal_priority,31.6,green bonus 1.00
+181527106#6,RIVERFRONT AVENUE SE,0.6323,0.0,9723,traffic_counts|incidents,signal_priority,31.6,green bonus 1.00
+-181527106#6,RIVERFRONT AVENUE SE,0.6323,0.0,9723,traffic_counts|incidents,signal_priority,31.6,green bonus 1.00
+-243484113,RIVERFRONT AVENUE SE,0.6323,0.0,9723,traffic_counts|incidents,signal_priority,31.6,green bonus 1.00
+-1269868035#0,8 STREET SW,0.0,0.0,,,normal,,
+-1270044869#0,8 AVENUE SW,0.0,0.0,,,normal,,
+-1270044869#6,8 AVENUE SW,0.0,0.0,,,normal,,
+-1270794198#0,8 STREET SW,0.0,0.0,,,normal,,
+-1270794198#2,8 STREET SW,0.0,0.0,,,normal,,
+-1270794200,8 STREET SW,0.0,0.0,,,normal,,
+-1270794201#0,8 STREET SW,0.0,0.0,,,normal,,
+-1273006477#0,8 AVENUE SW,0.0,0.0,,,normal,,
+-1273006478#2,8 AVENUE SW,0.0,0.0,,,normal,,
+-127950709#0,5 STREET SW,0.0,0.0,,,normal,,
+-1383744529#0,8 STREET SW,0.0,0.0,,,normal,,
+-140445187#0,1 STREET SW,0.0,0.0,,,normal,,
+-140445187#1,1 STREET SW,0.0,0.0,,,normal,,
+-140445187#3,1 STREET SW,0.0,0.0,,,normal,,
+-1409278401#0,8 STREET SW,0.0,0.0,,,normal,,
+-141106313#2,8 STREET SW,0.0,0.0,,,normal,,
+-141106318#1,8 STREET SW,0.0,0.0,,,normal,,
+-163317195#0,8 AVENUE SW,0.0,0.0,,,normal,,
+-166789696#3,8 STREET SW,0.0,0.0,,,normal,,
+-166789698#0,8 AVENUE SW,0.0,0.0,,,normal,,
+-166789698#10,8 AVENUE SW,0.0,0.0,,,normal,,
+-166789698#11,8 AVENUE SW,0.0,0.0,,,normal,,
+-166789698#12,8 AVENUE SW,0.0,0.0,,,normal,,
+-166789698#16,8 AVENUE SW,0.0,0.0,,,normal,,
+-166789698#17,8 AVENUE SW,0.0,0.0,,,normal,,
+-166789698#18,8 AVENUE SW,0.0,0.0,,,normal,,
+-166789698#5,8 AVENUE SW,0.0,0.0,,,normal,,
+-166789698#6,8 AVENUE SW,0.0,0.0,,,normal,,
+-166789698#8,8 AVENUE SW,0.0,0.0,,,normal,,
+-166789704#1,1 STREET SW,0.0,0.0,,,normal,,
+-166789705#4,8 STREET SW,0.0,0.0,,,normal,,
+-166789706#2,8 AVENUE SW,0.0,0.0,,,normal,,
+-166789706#4,8 AVENUE SW,0.0,0.0,,,normal,,
+-166790911#0,1 STREET SW,0.0,0.0,,,normal,,
+-166790917#2,8 STREET SW,0.0,0.0,,,normal,,
+-196471964#5,6 AVENUE SE,0.0,0.0,,,normal,,
+-196588530#2,1 STREET SW,0.0,0.0,,,normal,,
+-204201277#3,1 STREET SW,0.0,0.0,,,normal,,
+-204201281#0,4 STREET SW,0.0,0.0,,,normal,,
+-204201281#1,4 STREET SW,0.0,0.0,,,normal,,
+-204201281#3,4 STREET SW,0.0,0.0,,,normal,,
+-204201283#1,8 STREET SW,0.0,0.0,,,normal,,
+-222032503#2,6 STREET SW,0.0,0.0,,,normal,,
+-222033562#2,4 STREET SW,0.0,0.0,,,normal,,
+-222970224#2,1 STREET SW,0.0,0.0,,,normal,,
+-242259813#3,9 STREET SW,0.0,0.0,,,normal,,
+-248415514#4,9 STREET SW,0.0,0.0,,,normal,,
+-248415514#7,9 STREET SW,0.0,0.0,,,normal,,
+-254729343#2,1 STREET SW,0.0,0.0,,,normal,,
+-254729345#0,1 STREET SW,0.0,0.0,,,normal,,
+-259672388#1,5 STREET SW,0.0,0.0,,,normal,,
+-259672389#2,4 STREET SW,0.0,0.0,,,normal,,
+-259672389#4,4 STREET SW,0.0,0.0,,,normal,,
+-259672389#6,4 STREET SW,0.0,0.0,,,normal,,
+-284162737#0,1 STREET SW,0.0,0.0,,,normal,,
+-31973780#3,4 STREET SW,0.0,0.0,,,normal,,
+-32000776#6,6 STREET SW,0.0,0.0,,,normal,,
+-32000798#5,8 STREET SW,0.0,0.0,,,normal,,
+-467418506#0,5 STREET SW,0.0,0.0,,,normal,,
+-468684740#0,1 STREET SW,0.0,0.0,,,normal,,
+-468697559#0,1 STREET SW,0.0,0.0,,,normal,,
+-468697559#3,1 STREET SW,0.0,0.0,,,normal,,
+-470897464#1,4 STREET SW,0.0,0.0,,,normal,,
+-471326820#0,4 STREET SW,0.0,0.0,,,normal,,
+-478797089#3,8 STREET SW,0.0,0.0,,,normal,,
+-4826668#10,6 STREET SW,0.0,0.0,,,normal,,
+-4826668#21,6 STREET SW,0.0,0.0,,,normal,,
+-4826668#3,6 STREET SW,0.0,0.0,,,normal,,
+-4826684#4,9 STREET SW,0.0,0.0,,,normal,,
+-502712725#0,8 STREET SW,0.0,0.0,,,normal,,
+-555858216#0,8 STREET SW,0.0,0.0,,,normal,,
+1269868035#2,8 STREET SW,0.0,0.0,,,normal,,
+1270044869#0,8 AVENUE SW,0.0,0.0,,,normal,,
+1270044869#2,8 AVENUE SW,0.0,0.0,,,normal,,
+1270044871#0,9 STREET SW,0.0,0.0,,,normal,,
+1270794198#0,8 STREET SW,0.0,0.0,,,normal,,
+1270794198#2,8 STREET SW,0.0,0.0,,,normal,,
+1270794200,8 STREET SW,0.0,0.0,,,normal,,
+1270794201#0,8 STREET SW,0.0,0.0,,,normal,,
+1271398199#1,4 AVENUE SW,0.0,0.0,,,normal,,
+1271398200#0,4 AVENUE SW,0.0,0.0,,,normal,,
+1273006477#0,8 AVENUE SW,0.0,0.0,,,normal,,
+1273006478#2,8 AVENUE SW,0.0,0.0,,,normal,,
+1273258823#1,9 AVENUE SE,0.0,0.0,,,normal,,
+127734686#1,1 STREET SW,0.0,0.0,,,normal,,
+127734690#1,4 STREET SW,0.0,0.0,,,normal,,
+127734693#3,9 AVENUE SW,0.0,0.0,,,normal,,
+127734693#4,9 AVENUE SW,0.0,0.0,,,normal,,
+127950709#0,5 STREET SW,0.0,0.0,,,normal,,
+131157671#1,6 AVENUE SE,0.0,0.0,,,normal,,
+135678688#0,1 STREET SE,0.0,0.0,,,normal,,
+135678693#0,8 STREET SW,0.0,0.0,,,normal,,
+135678693#0-AddedOnRampEdge,8 STREET SW,0.0,0.0,,,normal,,
+135678694#1,8 STREET SW,0.0,0.0,,,normal,,
+1383744529#0,8 STREET SW,0.0,0.0,,,normal,,
+140445148#1,1 STREET SE,0.0,0.0,,,normal,,
+140445148#4,1 STREET SE,0.0,0.0,,,normal,,
+140445177#1,6 AVENUE SE,0.0,0.0,,,normal,,
+140445183#2,5 AVENUE SW,0.0,0.0,,,normal,,
+140445187#0,1 STREET SW,0.0,0.0,,,normal,,
+140445187#1,1 STREET SW,0.0,0.0,,,normal,,
+140445187#2,1 STREET SW,0.0,0.0,,,normal,,
+140445188#1,5 AVENUE SW,0.0,0.0,,,normal,,
+140445189#1,9 STREET SW,0.0,0.0,,,normal,,
+1409278401#0,8 STREET SW,0.0,0.0,,,normal,,
+1409830420#1,1 STREET SW,0.0,0.0,,,normal,,
+1409830427#1,1 STREET SW,0.0,0.0,,,normal,,
+1409830429#0,1 STREET SW,0.0,0.0,,,normal,,
+141106313#2,8 STREET SW,0.0,0.0,,,normal,,
+141106316#1,6 AVENUE SW,0.0,0.0,,,normal,,
+141106316#4,6 AVENUE SW,0.0,0.0,,,normal,,
+141106318#0,8 STREET SW,0.0,0.0,,,normal,,
+141106319#1,5 AVENUE SW,0.0,0.0,,,normal,,
+141116800#1,5 STREET SW,0.0,0.0,,,normal,,
+141116800#5,5 STREET SW,0.0,0.0,,,normal,,
+141116800#7,5 STREET SW,0.0,0.0,,,normal,,
+141116800#8,5 STREET SW,0.0,0.0,,,normal,,
+141116802#1,4 STREET SW,0.0,0.0,,,normal,,
+141116803#1,5 AVENUE SW,0.0,0.0,,,normal,,
+141116803#5,5 AVENUE SW,0.0,0.0,,,normal,,
+141116807#1,6 AVENUE SW,0.0,0.0,,,normal,,
+141116816#1,5 STREET SW,0.0,0.0,,,normal,,
+141116816#3,5 STREET SW,0.0,0.0,,,normal,,
+1423613723#0,5 STREET SW,0.0,0.0,,,normal,,
+1423613723#1,5 STREET SW,0.0,0.0,,,normal,,
+1423613723#2,5 STREET SW,0.0,0.0,,,normal,,
+1423613724,5 STREET SW,0.0,0.0,,,normal,,
+1423613729#0,9 AVENUE SW,0.0,0.0,,,normal,,
+1423613729#2,9 AVENUE SW,0.0,0.0,,,normal,,
+1423620494#0,9 AVENUE SE,0.0,0.0,,,normal,,
+1423620494#1,9 AVENUE SE,0.0,0.0,,,normal,,
+1452392419#0,9 STREET SW,0.0,0.0,,,normal,,
+1463656911#0,1 STREET SE,0.0,0.0,,,normal,,
+163317195#0,8 AVENUE SW,0.0,0.0,,,normal,,
+166789695#0,4 STREET SW,0.0,0.0,,,normal,,
+166789696#3,8 STREET SW,0.0,0.0,,,normal,,
+166789698#0,8 AVENUE SW,0.0,0.0,,,normal,,
+166789698#11,8 AVENUE SW,0.0,0.0,,,normal,,
+166789698#12,8 AVENUE SW,0.0,0.0,,,normal,,
+166789698#16,8 AVENUE SW,0.0,0.0,,,normal,,
+166789698#17,8 AVENUE SW,0.0,0.0,,,normal,,
+166789698#18,8 AVENUE SW,0.0,0.0,,,normal,,
+166789698#5,8 AVENUE SW,0.0,0.0,,,normal,,
+166789698#6,8 AVENUE SW,0.0,0.0,,,normal,,
+166789698#7,8 AVENUE SW,0.0,0.0,,,normal,,
+166789698#9,8 AVENUE SW,0.0,0.0,,,normal,,
+166789704#2,1 STREET SW,0.0,0.0,,,normal,,
+166789705#2,8 STREET SW,0.0,0.0,,,normal,,
+166789705#6,8 STREET SW,0.0,0.0,,,normal,,
+166789706#2,8 AVENUE SW,0.0,0.0,,,normal,,
+166789706#4,8 AVENUE SW,0.0,0.0,,,normal,,
+166789707#1,1 STREET SE,0.0,0.0,,,normal,,
+166789707#4,1 STREET SE,0.0,0.0,,,normal,,
+166790911#2,1 STREET SW,0.0,0.0,,,normal,,
+166790915#0,6 AVENUE SW,0.0,0.0,,,normal,,
+166790915#1,6 AVENUE SW,0.0,0.0,,,normal,,
+166790915#6,6 AVENUE SW,0.0,0.0,,,normal,,
+166790915#7,6 AVENUE SW,0.0,0.0,,,normal,,
+166790915#8,6 AVENUE SW,0.0,0.0,,,normal,,
+166790915#9,6 AVENUE SW,0.0,0.0,,,normal,,
+166790917#2,8 STREET SW,0.0,0.0,,,normal,,
+172465958#1,5 STREET SW,0.0,0.0,,,normal,,
+179489266#0,,0.0,0.0,,,normal,,
+179489270#1,8 STREET SW,0.0,0.0,,,normal,,
+19165392#1,5 AVENUE SE,0.0,0.0,,,normal,,
+19165400,9 AVENUE SE,0.0,0.0,,,normal,,
+196471964#1,6 AVENUE SE,0.0,0.0,,,normal,,
+196471985#1,4 AVENUE SW,0.0,0.0,,,normal,,
+196471993#0,9 AVENUE SE,0.0,0.0,,,normal,,
+196471993#2,9 AVENUE SE,0.0,0.0,,,normal,,
+196472004#0,4 AVENUE SW,0.0,0.0,,,normal,,
+196472004#1,4 AVENUE SW,0.0,0.0,,,normal,,
+196565641,4 AVENUE SW,0.0,0.0,,,normal,,
+196588530#2,1 STREET SW,0.0,0.0,,,normal,,
+196588540#1,5 AVENUE SW,0.0,0.0,,,normal,,
+198107933#0,9 AVENUE SW,0.0,0.0,,,normal,,
+198107933#1,9 AVENUE SW,0.0,0.0,,,normal,,
+198248650#1,5 AVENUE SE,0.0,0.0,,,normal,,
+198248661#1,1 STREET SE,0.0,0.0,,,normal,,
+198248662#0,1 STREET SE,0.0,0.0,,,normal,,
+198248662#11,1 STREET SE,0.0,0.0,,,normal,,
+198248662#14,1 STREET SE,0.0,0.0,,,normal,,
+198248662#15,1 STREET SE,0.0,0.0,,,normal,,
+198248662#17,1 STREET SE,0.0,0.0,,,normal,,
+198248662#7,1 STREET SE,0.0,0.0,,,normal,,
+198248662#8,1 STREET SE,0.0,0.0,,,normal,,
+198464170#1,9 STREET SW,0.0,0.0,,,normal,,
+198464173#1,6 AVENUE SW,0.0,0.0,,,normal,,
+198464173#5,6 AVENUE SW,0.0,0.0,,,normal,,
+198464180#1,9 STREET SW,0.0,0.0,,,normal,,
+198464181#1,4 AVENUE SE,0.0,0.0,,,normal,,
+198464186#1,4 AVENUE SW,0.0,0.0,,,normal,,
+198464186#5,4 AVENUE SW,0.0,0.0,,,normal,,
+198464189#1,9 AVENUE SW,0.0,0.0,,,normal,,
+200879002#1,4 AVENUE SE,0.0,0.0,,,normal,,
+203177440,9 AVENUE SW,0.0,0.0,,,normal,,
+203177444#1,4 AVENUE SW,0.0,0.0,,,normal,,
+203404550#1,5 AVENUE SW,0.0,0.0,,,normal,,
+203404552#1,9 AVENUE SW,0.0,0.0,,,normal,,
+203404553#0,6 STREET SW,0.0,0.0,,,normal,,
+204072389#1,5 STREET SW,0.0,0.0,,,normal,,
+204072396#2,5 AVENUE SW,0.0,0.0,,,normal,,
+204072399#1,5 STREET SW,0.0,0.0,,,normal,,
+204156098#1,6 AVENUE SW,0.0,0.0,,,normal,,
+204156100#0,6 STREET SW,0.0,0.0,,,normal,,
+204201277#2,1 STREET SW,0.0,0.0,,,normal,,
+204201281#0,4 STREET SW,0.0,0.0,,,normal,,
+204201281#1,4 STREET SW,0.0,0.0,,,normal,,
+204201281#2,4 STREET SW,0.0,0.0,,,normal,,
+204201283#0,8 STREET SW,0.0,0.0,,,normal,,
+204201291#1,4 AVENUE SW,0.0,0.0,,,normal,,
+209086947#0,9 AVENUE SW,0.0,0.0,,,normal,,
+209086947#1,9 AVENUE SW,0.0,0.0,,,normal,,
+209086947#4,9 AVENUE SW,0.0,0.0,,,normal,,
+209086947#7,9 AVENUE SW,0.0,0.0,,,normal,,
+222032503#2,6 STREET SW,0.0,0.0,,,normal,,
+222033562#0,4 STREET SW,0.0,0.0,,,normal,,
+222033562#3,4 STREET SW,0.0,0.0,,,normal,,
+222970219#1,4 AVENUE SW,0.0,0.0,,,normal,,
+222970223#0,4 AVENUE SE,0.0,0.0,,,normal,,
+222970224#2,1 STREET SW,0.0,0.0,,,normal,,
+242259813#2,9 STREET SW,0.0,0.0,,,normal,,
+24836134#1,6 AVENUE SW,0.0,0.0,,,normal,,
+248415514#2,9 STREET SW,0.0,0.0,,,normal,,
+248415514#5,9 STREET SW,0.0,0.0,,,normal,,
+254287943#1,5 AVENUE SE,0.0,0.0,,,normal,,
+254287943#4,5 AVENUE SE,0.0,0.0,,,normal,,
+254577644,1 STREET SE,0.0,0.0,,,normal,,
+254577645,1 STREET SE,0.0,0.0,,,normal,,
+254729343#2,1 STREET SW,0.0,0.0,,,normal,,
+254729344,1 STREET SW,0.0,0.0,,,normal,,
+254729345#0,1 STREET SW,0.0,0.0,,,normal,,
+254729346,1 STREET SW,0.0,0.0,,,normal,,
+254729347,1 STREET SW,0.0,0.0,,,normal,,
+254729350,1 STREET SW,0.0,0.0,,,normal,,
+255760889#0,4 STREET SW,0.0,0.0,,,normal,,
+255760889#2,4 STREET SW,0.0,0.0,,,normal,,
+259672388#1,5 STREET SW,0.0,0.0,,,normal,,
+259672388#2,5 STREET SW,0.0,0.0,,,normal,,
+259672389#2,4 STREET SW,0.0,0.0,,,normal,,
+259672389#4,4 STREET SW,0.0,0.0,,,normal,,
+259672389#6,4 STREET SW,0.0,0.0,,,normal,,
+284162737#2,1 STREET SW,0.0,0.0,,,normal,,
+31973599#1,1 STREET SE,0.0,0.0,,,normal,,
+31973599#7,1 STREET SE,0.0,0.0,,,normal,,
+31973780#2,4 STREET SW,0.0,0.0,,,normal,,
+32000716#1,5 STREET SW,0.0,0.0,,,normal,,
+32000753,5 STREET SW,0.0,0.0,,,normal,,
+32000776#2,6 STREET SW,0.0,0.0,,,normal,,
+32000798#2,8 STREET SW,0.0,0.0,,,normal,,
+32000829#0,,0.0,0.0,,,normal,,
+32000830#1,8 STREET SW,0.0,0.0,,,normal,,
+32094927,5 STREET SW,0.0,0.0,,,normal,,
+32517126#0,6 STREET SW,0.0,0.0,,,normal,,
+32517441,4 STREET SW,0.0,0.0,,,normal,,
+32517496,4 STREET SW,0.0,0.0,,,normal,,
+32548081#1,1 STREET SE,0.0,0.0,,,normal,,
+32551261#0,4 STREET SW,0.0,0.0,,,normal,,
+345479269,4 STREET SW,0.0,0.0,,,normal,,
+345479270,4 STREET SW,0.0,0.0,,,normal,,
+345479272#0,4 STREET SW,0.0,0.0,,,normal,,
+345479275#1,5 STREET SW,0.0,0.0,,,normal,,
+357501306#1,9 AVENUE SW,0.0,0.0,,,normal,,
+357501307#1,6 AVENUE SW,0.0,0.0,,,normal,,
+438869227#2,9 AVENUE SE,0.0,0.0,,,normal,,
+4397264#0,,0.0,0.0,,,normal,,
+4397264#1,,0.0,0.0,,,normal,,
+4397264#2,,0.0,0.0,,,normal,,
+457363882#0,5 STREET SW,0.0,0.0,,,normal,,
+457363886#1,5 STREET SW,0.0,0.0,,,normal,,
+457364348#0,9 AVENUE SW,0.0,0.0,,,normal,,
+457364348#1,9 AVENUE SW,0.0,0.0,,,normal,,
+457364348#2,9 AVENUE SW,0.0,0.0,,,normal,,
+458205292#1,6 AVENUE SW,0.0,0.0,,,normal,,
+458205292#8,6 AVENUE SW,0.0,0.0,,,normal,,
+461150500#1,4 AVENUE SW,0.0,0.0,,,normal,,
+466603014#1,9 STREET SW,0.0,0.0,,,normal,,
+466603015#0,9 STREET SW,0.0,0.0,,,normal,,
+466603015#3,9 STREET SW,0.0,0.0,,,normal,,
+466603016#1,9 STREET SW,0.0,0.0,,,normal,,
+467193014#0,5 AVENUE SW,0.0,0.0,,,normal,,
+467193014#1,5 AVENUE SW,0.0,0.0,,,normal,,
+467442482#1,5 STREET SW,0.0,0.0,,,normal,,
+467454087#1,4 STREET SW,0.0,0.0,,,normal,,
+4676205#0,9 STREET SW,0.0,0.0,,,normal,,
+468684736#2,1 STREET SW,0.0,0.0,,,normal,,
+468684739#1,1 STREET SW,0.0,0.0,,,normal,,
+468684740#0,1 STREET SW,0.0,0.0,,,normal,,
+468697559#2,1 STREET SW,0.0,0.0,,,normal,,
+470022853#1,4 STREET SW,0.0,0.0,,,normal,,
+470897464#0,4 STREET SW,0.0,0.0,,,normal,,
+478797088#0,8 STREET SW,0.0,0.0,,,normal,,
+478797089#0,8 STREET SW,0.0,0.0,,,normal,,
+478837358#1,1 STREET SW,0.0,0.0,,,normal,,
+478837359#0,1 STREET SW,0.0,0.0,,,normal,,
+478837360#1,1 STREET SW,0.0,0.0,,,normal,,
+4826668#16,6 STREET SW,0.0,0.0,,,normal,,
+4826668#2,6 STREET SW,0.0,0.0,,,normal,,
+4826668#8,6 STREET SW,0.0,0.0,,,normal,,
+4826684#2,9 STREET SW,0.0,0.0,,,normal,,
+491339440#0,,0.0,0.0,,,normal,,
+502712725#0,8 STREET SW,0.0,0.0,,,normal,,
+52510288#0,4 AVENUE SW,0.0,0.0,,,normal,,
+545005994#1,4 AVENUE SW,0.0,0.0,,,normal,,
+582014891#0,6 STREET SW,0.0,0.0,,,normal,,
+582014891#1,6 STREET SW,0.0,0.0,,,normal,,
+582014896,6 STREET SW,0.0,0.0,,,normal,,
+807915578#1,6 AVENUE SW,0.0,0.0,,,normal,,
+940306671#1,5 AVENUE SW,0.0,0.0,,,normal,,
+970223576#1,6 STREET SW,0.0,0.0,,,normal,,
+970223577#0,6 STREET SW,0.0,0.0,,,normal,,
+970223578#1,6 STREET SW,0.0,0.0,,,normal,,
+970223579#1,6 STREET SW,0.0,0.0,,,normal,,
+971004799,5 STREET SW,0.0,0.0,,,normal,,
+971004803,4 STREET SW,0.0,0.0,,,normal,,
+971004804,4 STREET SW,0.0,0.0,,,normal,,

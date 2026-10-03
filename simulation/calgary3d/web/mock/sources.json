@@ -1,0 +1,85 @@
+{
+  "generated": "2026-10-02T15:48:34.107Z",
+  "sources": [
+    {
+      "name": "OpenStreetMap",
+      "provides": "Road network, street names, geometry",
+      "url": "https://www.openstreetmap.org/",
+      "licence": "ODbL 1.0",
+      "attribution": "© OpenStreetMap contributors",
+      "status": "live",
+      "updated": "2026-10-02T15:30:00Z",
+      "note": "Community-maintained, updated continuously by contributors worldwide"
+    },
+    {
+      "name": "City of Calgary",
+      "provides": "Speed limits, traffic signals, road closures",
+      "url": "https://www.calgary.ca/",
+      "licence": "Open Government Licence",
+      "attribution": "The City of Calgary",
+      "status": "live",
+      "updated": "2026-10-02T15:45:00Z",
+      "note": "Official municipal data, updated regularly"
+    },
+    {
+      "name": "SUMO Traffic Simulation",
+      "provides": "Vehicle behaviour, microscopic simulation",
+      "url": "https://sumo.dlr.de/",
+      "licence": "EPL 2.0",
+      "attribution": "Eclipse SUMO",
+      "status": "static",
+      "updated": "2026-09-15T00:00:00Z",
+      "note": "Open source transport simulation engine"
+    },
+    {
+      "name": "Calgary Traffic Cameras",
+      "provides": "Real-time congestion estimation",
+      "url": "https://traffic.calgary.ca/",
+      "licence": "Calgary Municipal License",
+      "attribution": "City of Calgary Traffic",
+      "status": "live",
+      "updated": "2026-10-02T15:48:00Z",
+      "note": "Processed from CCTV sensors across the city"
+    },
+    {
+      "name": "Waze Crowd Data",
+      "provides": "Incident reports, user-generated hazards",
+      "url": "https://www.waze.com/",
+      "licence": "Proprietary",
+      "attribution": "Waze Users",
+      "status": "live",
+      "updated": "2026-10-02T15:48:30Z",
+      "note": "Crowdsourced traffic and incident data"
+    },
+    {
+      "name": "Alberta 511",
+      "provides": "Highway incidents, seasonal closures",
+      "url": "https://www.511.alberta.ca/",
+      "licence": "Crown Copyright",
+      "attribution": "Government of Alberta",
+      "status": "live",
+      "updated": "2026-10-02T15:40:00Z",
+      "note": "Official provincial traffic information"
+    },
+    {
+      "name": "Weather Integration",
+      "provides": "Weather-based congestion modelling",
+      "url": "https://weather.gc.ca/",
+      "licence": "Government of Canada Licence",
+      "attribution": "Environment and Climate Change Canada",
+      "status": "static",
+      "updated": "2026-10-02T15:00:00Z",
+      "note": "Models weather impact on traffic flow"
+    },
+    {
+      "name": "Events Calendar",
+      "provides": "Major events, sports, concerts",
+      "url": "https://www.calgary.ca/events",
+      "licence": "Open Government Licence",
+      "attribution": "City of Calgary",
+      "status": "modelled",
+      "updated": "2026-10-02T12:00:00Z",
+      "note": "Used to predict traffic patterns during events"
+    }
+  ]
+}

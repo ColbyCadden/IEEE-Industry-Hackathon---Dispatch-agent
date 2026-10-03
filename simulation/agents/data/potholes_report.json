@@ -1,0 +1,20 @@
+{
+  "fetched_at": "2026-10-03T16:40:23.405532+00:00",
+  "scout": {
+    "ok": true,
+    "layers": {
+      "Open": 66,
+      "Closed": 376,
+      "Overdue": 0
+    }
+  },
+  "analyst": {
+    "ok": true,
+    "total_rows": 200,
+    "duplicates_dropped": 2,
+    "closed_dropped": 22,
+    "open_kept": 16
+  },
+  "total": 458,
+  "in_network_open": 0
+}

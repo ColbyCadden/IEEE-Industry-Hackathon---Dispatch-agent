@@ -1,0 +1,38 @@
+{
+  "travel_times": {
+    "source": "calgary_travel_times",
+    "ok": true,
+    "count": 68,
+    "note": "measured drive times, refreshed ~every 3 min by the city",
+    "seconds": 0.71,
+    "file": "C:\\Users\\K9912\\IEEE-Industry-Hackathon---Dispatch-agent\\simulation\\agents\\data\\travel_times.csv"
+  },
+  "alerts_511": {
+    "source": "511_alberta",
+    "ok": true,
+    "count": 0,
+    "emergency": false,
+    "note": "statewide banner feed; often empty at night",
+    "seconds": 0.17,
+    "file": "C:\\Users\\K9912\\IEEE-Industry-Hackathon---Dispatch-agent\\simulation\\agents\\data\\alerts_511.csv"
+  },
+  "incidents": {
+    "source": "socrata_incidents",
+    "ok": true,
+    "count": 500,
+    "note": "live incident feed from City of Calgary",
+    "seconds": 0.76,
+    "file": "C:\\Users\\K9912\\IEEE-Industry-Hackathon---Dispatch-agent\\simulation\\agents\\data\\incidents.csv"
+  },
+  "traffic_counts": {
+    "source": "traffic_counts",
+    "ok": true,
+    "count": 9230,
+    "layer": 0,
+    "geometry": false,
+    "note": "annual volume counts, study dates 2002-2018; not live speed",
+    "available_total": 9230,
+    "seconds": 1.29,
+    "file": "C:\\Users\\K9912\\IEEE-Industry-Hackathon---Dispatch-agent\\simulation\\agents\\data\\traffic_counts.csv"
+  }
+}

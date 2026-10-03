@@ -1,0 +1,5 @@
+# Pinned to the versions this project was built and tested against.
+# Install with:  pip install -r calgary3d/requirements.txt
+eclipse-sumo==1.27.1
+traci==1.27.1
+sumolib==1.27.1

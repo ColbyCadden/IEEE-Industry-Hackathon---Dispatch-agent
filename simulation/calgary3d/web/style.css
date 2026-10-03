@@ -1,0 +1,122 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body { overflow: hidden; background: #000; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #fff; }
+
+#container { width: 100vw; height: 100vh; position: fixed; top: 0; left: 0; }
+
+/* Connection badge */
+#connection-badge {
+  position: fixed; top: 12px; left: 12px;
+  padding: 6px 14px; border-radius: 20px;
+  font-size: 13px; font-weight: 600; z-index: 100;
+  backdrop-filter: blur(10px); pointer-events: none;
+}
+.badge-connecting { background: rgba(255,165,0,0.25); color: #ffa500; }
+.badge-connected { background: rgba(0,200,0,0.2); color: #0c0; }
+.badge-mock { background: rgba(138,43,226,0.2); color: #ba55d3; }
+.badge-error { background: rgba(255,0,0,0.2); color: #f44; }
+.badge-live { background: rgba(52,168,83,0.22); color: #34a853; }
+
+/* Congestion layer self-diagnostic: shows how many roads actually got
+   coloured and which measured sources fed them. */
+#congestion-diag {
+  display: none;
+  margin-top: 6px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  line-height: 1.4;
+  background: rgba(0,0,0,0.45);
+  color: #9fd3ff;
+  border-left: 2px solid rgba(52,168,83,0.6);
+}
+
+/* Help text */
+#help-text {
+  position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+  text-align: center; font-size: 12px; opacity: 0.7; z-index: 100;
+  background: rgba(0,0,0,0.5); padding: 8px 20px; border-radius: 20px;
+  pointer-events: none; transition: opacity 0.5s;
+}
+
+/* Stats HUD */
+#stats-hud {
+  position: fixed; top: 12px; right: 290px;
+  display: flex; gap: 16px; font-size: 13px; z-index: 100;
+  background: rgba(0,0,0,0.4); padding: 6px 16px; border-radius: 20px;
+  backdrop-filter: blur(10px); pointer-events: none;
+}
+#stats-hud div { white-space: nowrap; }
+#stat-mode { color: #4af; font-weight: 600; }
+
+/* Control Panel */
+#control-panel {
+  position: fixed; top: 12px; right: 12px;
+  width: 260px; background: rgba(20,25,35,0.85);
+  backdrop-filter: blur(16px); border-radius: 14px;
+  border: 1px solid rgba(255,255,255,0.12);
+  z-index: 200; font-size: 13px;
+  transition: height 0.3s ease, opacity 0.3s ease;
+}
+#panel-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 14px; cursor: pointer; user-select: none;
+  font-weight: 600; font-size: 14px;
+}
+#panel-toggle {
+  background: none; border: none; color: #fff; font-size: 18px;
+  cursor: pointer; width: 28px; height: 28px; border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+}
+#panel-toggle:hover { background: rgba(255,255,255,0.1); }
+#panel-body {
+  padding: 0 14px 14px; overflow: hidden;
+  transition: max-height 0.3s ease;
+}
+.panel-collapsed #panel-body { max-height: 0 !important; padding-bottom: 0; }
+.panel-collapsed #panel-toggle { transform: rotate(180deg); }
+#panel-body { max-height: 800px; }
+
+.ctrl-group { margin-bottom: 10px; }
+.ctrl-group label { display: block; margin-bottom: 3px; font-size: 12px; opacity: 0.8; }
+.ctrl-group label span { float: right; color: #4af; }
+.ctrl-group select {
+  width: 100%; padding: 6px 8px; background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.2); border-radius: 6px;
+  color: #fff; font-size: 13px; outline: none;
+}
+.ctrl-group select option { background: #1a1a2e; }
+.ctrl-group input[type=range] {
+  width: 100%; accent-color: #4af;
+}
+.action-btn {
+  width: 100%; padding: 8px; background: rgba(68,170,255,0.15);
+  border: 1px solid rgba(68,170,255,0.3); border-radius: 8px;
+  color: #4af; font-size: 13px; cursor: pointer; transition: background 0.2s;
+}
+.action-btn:hover { background: rgba(68,170,255,0.25); }
+.icon-btn {
+  background: none; border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 6px; color: #fff; padding: 4px 8px; cursor: pointer;
+  font-size: 14px; margin-left: 6px;
+}
+.checkbox-row { margin-top: 8px; }
+.checkbox-row label { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; }
+.checkbox-row input[type=checkbox] { accent-color: #4af; }
+
+#closed-roads-section { font-size: 12px; }
+#closed-roads-section strong { display: block; margin-bottom: 4px; }
+#closed-roads-list { list-style: none; max-height: 120px; overflow-y: auto; }
+#closed-roads-list li {
+  padding: 3px 6px; margin-bottom: 2px; border-radius: 4px;
+  background: rgba(255,0,0,0.15); color: #f66; font-size: 11px;
+  cursor: pointer;
+}
+#closed-roads-list li:hover { background: rgba(255,0,0,0.3); }
+#closed-roads-list li::before { content: '✕ '; }
+hr { border: none; border-top: 1px solid rgba(255,255,255,0.1); margin: 8px 0; }
+
+/* Night mode overrides */
+body.night-mode #control-panel { background: rgba(10,15,30,0.9); }
+body.night-mode #help-text { background: rgba(20,20,60,0.6); }
+body.night-mode #stats-hud { background: rgba(10,15,30,0.6); }

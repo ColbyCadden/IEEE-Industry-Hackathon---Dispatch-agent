@@ -1,0 +1,28 @@
+I wrote the report, and the file and both charts are saved. The one material change is eastbound traffic in the PM peak.
+
+**What the data shows**
+- **Eastbound, 16:00–18:00:** 799 vehicles against 614 on the baseline day, up 30.1%. All 8 fifteen-minute intervals are higher. The average gain is 23 vehicles per interval (95% CI 17 to 30).
+- **Other approaches:** north, south and west are within noise in the peak. Off-peak volumes are within about 1.5% of baseline.
+- **E-W share:** The east–west share of peak volume rose from 53.5% to 57.3%.
+
+**Caveats**
+- **One-day baseline:** The baseline is a single Tuesday, so there is no day-to-day variance. The confidence intervals only cover variation between intervals within the day, so they are optimistic.
+- **Bad row:** The current file has a duplicate row for 10:15 north with a value of −5, appended at the end of the file. I dropped it and kept the in-sequence value of 20. That assumption can't change any finding.
+- **Step shape:** Both days jump sharply at 16:00 and drop at 18:00, with no gradual ramp. That may mean the data was produced or aggregated that way, so treat exact peak timing with caution.
+- **Not computed:** v/c, platoons and queue growth, because there are no signal timings, lane counts or saturation flows.
+
+**Candidate timing changes**
+- The report offers hypotheses to test in simulation only: shift green toward east–west in the peak, review cycle length, and check eastbound offsets.
+- It recommends collecting 3–4 more Tuesdays and finding out what happened on 09-22 before changing anything.
+- The FHWA Signal Timing Manual and HCM links are cited from memory; I didn't open them this session.
+
+I installed matplotlib to draw the charts.
+
+Files are in ./:
+- analyst_report.md
+- analyst_counts_by_approach.png
+- analyst_pm_peak_volume.png
+
+I also left the helper scripts an.py, an2.py and chk.py in that folder.
+
+session_id: 20261001_233824_6d3b4a

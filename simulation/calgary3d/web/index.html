@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Calgary 3D Traffic Sim</title>
+<link rel="stylesheet" href="style.css">
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+
+<div id="container"></div>
+
+<div id="connection-badge" class="badge-connecting">● Connecting</div>
+
+<div id="help-text">
+  <strong>Controls:</strong> Click to fly (WASD/QE), Shift=boost, Scroll=speed<br>
+  C = Orbit mode &nbsp;|&nbsp; O = Cinematic orbit &nbsp;|&nbsp; Tab = Panel &nbsp;|&nbsp; Esc = Release<br>
+  Click road to close/reopen
+</div>
+
+<div id="stats-hud">
+  <div>🚗 <span id="stat-cars">0</span> cars</div>
+  <div>⚡ <span id="stat-speed">0</span> km/h avg</div>
+  <div>🛑 <span id="stat-stopped">0</span> stopped</div>
+  <div>⏱ <span id="stat-time">0.0</span>s</div>
+  <div>🎯 <span id="stat-fps">0</span> FPS</div>
+  <div id="stat-mode">Normal</div>
+</div>
+
+<div id="control-panel" class="panel-collapsed">
+  <div id="panel-header">
+    <span>⚙ Control</span>
+    <button id="panel-toggle" title="Toggle panel">−</button>
+  </div>
+  <div id="panel-body">
+    <div class="ctrl-group">
+      <label>Sim Speed <span id="val-playback">1.0x</span></label>
+      <input type="range" id="ctrl-playback" min="0" max="4" step="0.1" value="1">
+      <button id="btn-pause" class="icon-btn" title="Pause/Play">⏯</button>
+    </div>
+    <div class="ctrl-group">
+      <label>Speed Limit Scale <span id="val-speedscale">1.0</span></label>
+      <input type="range" id="ctrl-speedscale" min="0.2" max="2" step="0.1" value="1">
+    </div>
+    <div class="ctrl-group">
+      <label>Traffic Volume <span id="val-demand">1.0</span></label>
+      <input type="range" id="ctrl-demand" min="0" max="3" step="0.1" value="1">
+    </div>
+    <div class="ctrl-group">
+      <label>Signal Mode</label>
+      <select id="ctrl-signalmode">
+        <option value="normal">Normal</option>
+        <option value="allRed">All Red</option>
+        <option value="allGreen">All Green</option>
+        <option value="flashing">Flashing</option>
+      </select>
+    </div>
+    <div class="ctrl-group">
+      <button id="btn-reset" class="action-btn">⟳ Reset Sim</button>
+    </div>
+    <hr>
+    <div class="ctrl-group">
+      <button id="btn-daynight" class="action-btn">🌙 Night Mode</button>
+    </div>
+    <div class="ctrl-group checkbox-row">
+      <label><input type="checkbox" id="chk-buildings" checked> Show Buildings</label>
+    </div>
+    <div class="ctrl-group checkbox-row">
+      <label><input type="checkbox" id="chk-speedcolor" checked> Color by Speed</label>
+    </div>
+    <div class="ctrl-group checkbox-row">
+      <label><input type="checkbox" id="chk-labels"> Street Labels</label>
+    </div>
+    <hr>
+    <div id="closed-roads-section">
+      <strong>Closed Roads:</strong>
+      <ul id="closed-roads-list"></ul>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="app.js"></script>
+<script type="module" src="congestion.js"></script>
+<script type="module" src="potholes.js"></script>
+</body>
+</html>

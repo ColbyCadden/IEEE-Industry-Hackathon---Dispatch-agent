@@ -1,0 +1,11 @@
+import csv, collections
+r = list(csv.DictReader(open('counts_current.csv')))
+c = collections.Counter((x['interval_start'], x['approach']) for x in r)
+print([k for k, v in c.items() if v > 1])
+for k, v in c.items():
+    if v > 1: print([x for x in r if (x['interval_start'], x['approach']) == k])
+ts = sorted({x['interval_start'] for x in r})
+print([(t, [a for a in 'NSEW' if (t, a) not in c]) for t in ts if any((t, a) not in c for a in 'NSEW')])
+vals = sorted(int(x['count']) for x in r); print(vals[:3], vals[-5:])
+for t in ts:
+    print(t[11:], [next((x['count'] for x in r if x['interval_start'] == t and x['approach'] == a), '-') for a in 'NSEW'])

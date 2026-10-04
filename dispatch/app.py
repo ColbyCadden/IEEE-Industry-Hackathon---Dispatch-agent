@@ -1,11 +1,6 @@
 """Streamlit demo: `streamlit run dispatch/app.py` (run `python -m dispatch.run` first)."""
-<<<<<<< HEAD
 import hashlib
-=======
-import html
->>>>>>> 8b3131f698cc6b40b583c6b4e605ef1d334d1b6e
 import json
-import re
 import sys
 from pathlib import Path
 
@@ -180,17 +175,6 @@ SOURCE_NOTES = {
     "claude": ":material/auto_awesome: Written by Claude from the plan's numbers.",
     "rules": ":material/rule: Claude unavailable (no API key or no connection) - rule-based template briefing.",
     "numbers": ":material/warning: Briefing service unavailable - showing the numbers only.",
-}
-
-# The case asks what the supervisor hears at 8 a.m. and at noon: one slot each, in time order.
-BRIEF_SLOTS = {  # key -> (time, title, icon, accent colour)
-    "8am": ("8:00 a.m.", "Morning plan", "🌅", "rgb(31,119,180)"),
-    "noon": ("12:00 noon", "Midday replan", "🔁", "rgb(255,127,14)"),
-}
-CHIP_TONES = {
-    "good": "background:rgba(44,160,44,.16);color:rgb(44,160,44)",
-    "bad": "background:rgba(214,39,40,.14);color:rgb(214,39,40)",
-    "neutral": "background:rgba(128,128,128,.16)",
 }
 
 
@@ -517,86 +501,7 @@ def render_improvement(metrics: dict) -> None:
     st.caption(summary)
 
 
-<<<<<<< HEAD
 def render_crews(plan: dict, changes: dict | None, out_crews: set, slots: dict | None = None) -> None:
-=======
-def _sentences(text: str) -> list[str]:
-    """Split a briefing into sentences without breaking on 'a.m.' / 'p.m.'."""
-    guarded = re.sub(r"\b([ap])\.m\.", r"\1<dot>m<dot>", text.strip())
-    parts = [p.replace("<dot>", ".") for p in re.split(r"(?<=[.!?])\s+(?=[A-Z0-9])", guarded) if p.strip()]
-    if len(parts) > 1 and len(parts[0].split()) <= 3:  # "Good morning." opens the next point, not its own
-        parts[:2] = [f"{parts[0]} {parts[1]}"]
-    return parts
-
-
-def _brief_card_html(slot: str, text: str | None, chips: list[tuple[str, str]], active: bool) -> str:
-    """One timeline card: time + title, highlight chips, then the briefing as a numbered list.
-
-    text=None renders the waiting state (no crew update yet). Briefing text is escaped: it may come
-    from Claude.
-    """
-    when, title, icon, accent = BRIEF_SLOTS[slot]
-    border = f"2px solid {accent}" if active else "1px solid rgba(128,128,128,.35)"
-    tag = (f"<span style='margin-left:auto;font-size:.72rem;font-weight:600;padding:.1rem .5rem;"
-           f"border-radius:1rem;background:{accent};color:white'>on the map</span>" if active else "")
-    head = (f"<div style='display:flex;align-items:center;gap:.5rem;flex-wrap:wrap'>"
-            f"<span style='font-size:1.25rem'>{icon}</span>"
-            f"<span style='font-weight:800;color:{accent}'>{when}</span>"
-            f"<span style='font-weight:600;opacity:.85'>· {title}</span>{tag}</div>")
-    if text is None:
-        return (f"<div style='border:1px dashed rgba(128,128,128,.5);border-left:5px solid {accent};"
-                f"border-radius:.6rem;padding:.7rem 1rem;margin-bottom:.4rem;opacity:.6'>{head}"
-                f"<div style='font-style:italic;margin-top:.45rem'>Waiting for a crew update. Report one below "
-                f"and the noon briefing appears here.</div></div>")
-    pills = "".join(f"<span style='display:inline-block;margin:.45rem .35rem 0 0;padding:.15rem .6rem;"
-                    f"border-radius:1rem;font-size:.82rem;font-weight:700;{CHIP_TONES[tone]}'>{html.escape(label)}"
-                    f"</span>" for label, tone in chips)
-    items = "".join(f"<li style='margin:.2rem 0'>{html.escape(s)}</li>" for s in _sentences(text))
-    return (f"<div style='border:{border};border-left:5px solid {accent};border-radius:.6rem;"
-            f"padding:.7rem 1rem;margin-bottom:.4rem'>{head}<div>{pills}</div>"
-            f"<ol style='margin:.55rem 0 0 1.1rem;padding:0;line-height:1.45'>{items}</ol></div>")
-
-
-def _event_label(event: dict) -> str:
-    if event.get("event") == "crew_partial":
-        return f"Crew {event.get('crew')} short-handed ({float(event.get('capacity', 0.5)):.0%})"
-    return f"Crew {event.get('crew')} out"
-
-
-def render_briefings(view: str, data: dict, metrics: dict) -> None:
-    """Both supervisor briefings in time order: 8 a.m. plan, then the noon replan (or its waiting state)."""
-    st.subheader("Supervisor briefings")
-    st.caption("What the Roads supervisor hears at 8 a.m. and at noon, written from the plan's numbers.")
-    if view == "FIFO":
-        st.caption(f":material/info: The map shows the oldest-first baseline: {metrics['fifo']['safety']} safety "
-                   f"tickets versus {metrics['8am']['safety']} in the agent's plan. Both briefings below are "
-                   f"for the agent's plan.")
-
-    text, src = cached_briefing("8am", data["plan_8am"], metrics, "8am")
-    m, fifo = metrics["8am"], metrics["fifo"]
-    chips = [(f"{m['safety']} safety tickets", "good"),
-             (f"{m['safety'] - fifo['safety']:+d} vs oldest-first", "good" if m["safety"] >= fifo["safety"] else "bad"),
-             (f"{m['n']} jobs", "neutral")]
-    st.markdown(_brief_card_html("8am", text, chips, active=view == "Agent"), unsafe_allow_html=True)
-    st.caption(SOURCE_NOTES[src])
-
-    noon = st.session_state.noon
-    if noon and "plan" in noon:
-        ev, nm = noon["event"], noon["metrics"]["noon"]
-        text, src = cached_briefing(f"noon:{ev['event']}:{ev['crew']}:{ev.get('capacity')}",
-                                    noon["plan"], noon["metrics"], "noon", noon["changes"], event=ev)
-        lost = nm.get("safety_dropped", 0)
-        chips = [(_event_label(ev), "bad"), (f"{nm.get('moved', 0)} moved", "neutral"),
-                 (f"{nm.get('dropped', 0)} deferred", "neutral"),
-                 (f"{lost} safety dropped", "good" if lost == 0 else "bad")]
-        st.markdown(_brief_card_html("noon", text, chips, active=view == "Agent - noon"), unsafe_allow_html=True)
-        st.caption(SOURCE_NOTES[src])
-    else:
-        st.markdown(_brief_card_html("noon", None, [], active=False), unsafe_allow_html=True)
-
-
-def render_crews(plan: dict, changes: dict | None, out_crew: int | None) -> None:
->>>>>>> 8b3131f698cc6b40b583c6b4e605ef1d334d1b6e
     moved = {m["id"] for m in (changes or {}).get("moved", [])}
     cols = st.columns(4)
     for i, c in enumerate(plan["crews"]):
@@ -810,7 +715,6 @@ with right:
         st.subheader("Selected crew")
         render_crew_panel(sel_crew, changes, out_crews)
     else:
-<<<<<<< HEAD
         st.subheader("Briefing")
         with st.container(border=True):
             if view == "FIFO":
@@ -825,9 +729,6 @@ with right:
                     text, src = cached_briefing(f"noon:{digest}", plan, ss.noon["metrics"], "noon", changes, event=ev)
                 st.write(text)
                 st.caption(SOURCE_NOTES[src])
-=======
-        render_briefings(view, data, metrics)
->>>>>>> 8b3131f698cc6b40b583c6b4e605ef1d334d1b6e
         st.caption(":material/touch_app: Click a crew name or a job below to focus the map on it.")
 
     st.subheader("Report an update")

@@ -864,6 +864,22 @@ def render_flow_diagram() -> None:
         st.code(src, language="text")
 
 
+SIM3D_EMBED = """<div id="sim3d-host" style="width:100%;height:640px;border-radius:12px;overflow:hidden"></div>
+<script>
+(() => {
+  const host = document.getElementById("sim3d-host");
+  if (!host || host.querySelector("iframe")) return;
+  const f = document.createElement("iframe");
+  f.src = "__SRC__";
+  f.title = "3D downtown traffic simulation with today's jobs";
+  f.allow = "fullscreen; autoplay";
+  f.style.cssText = "width:100%;height:100%;border:0;display:block";
+  host.appendChild(f);
+  f.addEventListener("mouseenter", () => f.focus());  // keys go to the sim while the mouse is over it
+})();
+</script>"""
+
+
 def render_downtown_3d(plan: dict, show: bool) -> None:
     """Semir's live SUMO traffic sim of downtown Calgary, with today's downtown jobs as pins."""
     st.subheader("3D downtown")
@@ -884,9 +900,14 @@ def render_downtown_3d(plan: dict, show: bool) -> None:
     if not show:
         return
     if sim3d.running():
-        st.iframe(sim3d.URL + "?embed=1", height=640, alt="3D downtown traffic simulation with today's jobs")
-        st.caption("Drag to look around, scroll to zoom. The panel on the right toggles the plan pins, traffic and "
-                   "live incidents. Pins update within 10 s of a replan.")
+        # st.iframe / components are sandboxed without pointer lock, so the drone can't fly there. A small script
+        # creates the frame in the page itself (fixed localhost URL, never user input).
+        st.html(SIM3D_EMBED.replace("__SRC__", sim3d.URL + "?embed=1"), unsafe_allow_javascript=True)
+        c1, c2 = st.columns([4, 1], vertical_alignment="center")
+        c1.caption("**Click the city to fly:** mouse to look, W A S D to move, Q / E up and down, Shift to go "
+                   "faster, **Esc** to get the mouse back. C = orbit view. **Control** (top right) opens the "
+                   "traffic, lights and plan-pin settings. Pins update within 10 s of a replan.")
+        c2.link_button("Open full screen", sim3d.URL, icon=":material/open_in_new:", width="stretch")
         return
     st.info("The 3D simulation isn't running.", icon=":material/view_in_ar:")
     if st.button("Start the 3D sim", icon=":material/play_arrow:", key="start_3d"):

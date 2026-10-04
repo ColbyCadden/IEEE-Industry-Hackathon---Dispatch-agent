@@ -11,7 +11,6 @@ from pathlib import Path
 
 import pydeck as pdk
 import streamlit as st
-import streamlit.components.v1 as components
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))  # `streamlit run` only puts dispatch/ on the path
@@ -25,11 +24,6 @@ try:  # the baseline / result / improved comparison is shared with `python -m di
     from dispatch import improvement  # noqa: E402
 except Exception:
     improvement = None
-
-try:  # caller voice call: intake agent, local voice API, optional ElevenLabs voice
-    from dispatch import intake, voice, voice_server  # noqa: E402
-except Exception:
-    intake = voice = voice_server = None
 
 try:  # new urgent jobs and the day's running log of updates
     from dispatch import live as day_live  # noqa: E402
@@ -243,8 +237,6 @@ def read_by(ev: dict) -> str:
         return ":material/auto_awesome: Read by **Claude**"
     if src == "manual":
         return ":material/edit: Entered by hand"
-    if src == "caller":
-        return ":material/call: From a caller report (Caller report tab)"
     if why.startswith("fallback"):
         return ":material/rule: Read by the **rule-based parser** (Claude unavailable: no API key or no connection)"
     return ":material/rule: Read by the **rule-based parser** (simple message, no Claude call needed)"
@@ -869,168 +861,6 @@ def render_analysis(data: dict, metrics: dict) -> None:
                                   f"{nm.get('safety_dropped', 0)} safety dropped", 3.0), unsafe_allow_html=True)
 
 
-VOICE_WIDGET = ROOT / "dispatch" / "voice_call.html"
-
-
-@st.cache_resource
-def voice_api_port() -> int | None:
-    """Start the local voice API once per dashboard process (see dispatch/voice_server.py)."""
-    try:
-        return voice_server.start()
-    except Exception:
-        return None
-
-
-def _new_call(greet: bool = True) -> None:
-    """Start a call in the shared store. greet: say the opening line in typed mode (not on first load)."""
-    ss_ = st.session_state
-    ss_.call_count = ss_.get("call_count", 0) + 1
-    ss_.call_id = voice_server.new_call(ss_.caller_plan, ss_.call_count)
-    ss_.speak_text = intake.OPENING if greet else None
-
-
-def _typed(plan: dict) -> None:
-    """A typed caller line: same conversation store as the voice call."""
-    ss_ = st.session_state
-    text = (ss_.get(f"caller_msg_{ss_.call_id}") or "").strip()
-    if text:
-        with st.spinner("Agent is replying..."):
-            out = voice_server.turn(ss_.call_id, text)
-        ss_.speak_text = out["reply"]
-
-
-def _speak_once(text: str, use_voice: bool) -> None:
-    """Say a typed-mode reply: ElevenLabs when a key is set, else the browser's built-in voice."""
-    audio = voice.speak(text) if use_voice else None
-    if audio:
-        st.audio(audio, format="audio/mp3", autoplay=True)
-        return
-    components.html(  # browser speech synthesis: free, offline, no key
-        f"<script>/*{hash(text) ^ id(text)}*/const u=new SpeechSynthesisUtterance({json.dumps(text)});u.rate=1.05;"
-        f"speechSynthesis.cancel();speechSynthesis.speak(u);</script>", height=0)
-
-
-def _caller_map(state: dict, plan: dict) -> None:
-    """The caller's pin, the nearest crew's jobs in colour, everything else faint."""
-    lat, lon = state["lat"], state["lon"]
-    nearest = min(plan["crews"], key=lambda c: intake._km(lat, lon, *c["centroid"]))
-    r, g, b = CREW_COLORS[(nearest["crew"] - 1) % len(CREW_COLORS)]
-    jobs = [{**j, "crew": c["crew"], "color": [r, g, b, 230] if c is nearest else [150, 150, 150, 90],
-             "radius": 6 if c is nearest else 3} for c in plan["crews"] for j in c["jobs"]]
-    pin = [{"lat": lat, "lon": lon, "type": "Caller report", "where": state["where"]}]
-    layers = [
-        pdk.Layer("ScatterplotLayer", jobs, get_position="[lon, lat]", get_fill_color="color", get_radius="radius",
-                  radius_units="'pixels'", pickable=True),
-        pdk.Layer("ScatterplotLayer", pin, get_position="[lon, lat]", get_fill_color=[214, 39, 40], get_radius=11,
-                  radius_units="'pixels'", stroked=True, get_line_color=[255, 255, 255], line_width_min_pixels=3,
-                  pickable=True),
-        pdk.Layer("TextLayer", [{"lat": nearest["centroid"][0], "lon": nearest["centroid"][1],
-                                 "label": f"Crew {nearest['crew']}"}], get_position="[lon, lat]", get_text="label",
-                  get_color=[r, g, b], get_size=14, font_weight=700),
-    ]
-    st.pydeck_chart(pdk.Deck(layers=layers, initial_view_state=pdk.ViewState(latitude=lat, longitude=lon, zoom=12),
-                             map_provider="carto", map_style="light",
-                             tooltip={"text": "{type} {where}"}),
-                    key=f"caller_map_{lat:.5f}_{lon:.5f}", height=260,
-                    alt="Map with the caller's reported location and the nearest crew's jobs")
-    approx = " · approximate (one street of the pair)" if state["precision"] == "approximate" else ""
-    st.caption(f":material/location_on: **{state['where']}**{approx} · red = caller's report, colour = crew "
-               f"{nearest['crew']}'s jobs today")
-
-
-def _render_call(call_id: str, plan: dict, on_add=None) -> None:
-    """Transcript, map and ticket for one call; re-run every second so voice turns appear live."""
-    call = voice_server.get(call_id)
-    if call is None:
-        return
-    for m in call["history"]:
-        with st.chat_message(m["role"], avatar=":material/call:" if m["role"] == "user" else ":material/support_agent:"):
-            st.write(m["content"])
-    if call["source"]:
-        st.caption({"claude": ":material/auto_awesome: Replies by Claude.",
-                    "rules": ":material/rule: Rule-based call-taker (Claude unavailable: no API key or no "
-                             "connection)."}[call["source"]])
-    state = call["state"]
-    if state["lat"] is not None:
-        _caller_map(state, plan)
-    elif state["failed_location"]:
-        st.caption(f":material/wrong_location: Couldn't place “{state['failed_location']}” on the map yet.")
-    t = call["ticket"]
-    if call["done"] and not t:
-        st.caption(":material/call_end: The caller ended the call; nothing was logged. Press New call to start again.")
-    if t:
-        with st.container(border=True):
-            st.markdown(f"**:material/assignment_turned_in: Ticket {t['id']} logged** · {t['type']}"
-                        )
-            if t["safety"]:
-                st.badge("Safety ticket", color="red")
-            where = f"- **Where:** {t['where']}" + (f" ({t['community'].title()})" if t["community"] else "")
-            nearest = f"- **Nearest crew:** Crew {t['crew']} ({t['zone']}), {t['crew_km']} km from its zone centre"
-            if on_add is None:
-                st.markdown("\n".join([where, f"- **Priority:** {p10(t['P']):.1f} / 10 (P {t['P']:.2f}, type weight {t['P']:g}, new today, "
-                                        f"1 report)", nearest, f"- **Today's plan:** {t['fit']}"]))
-            else:
-                sev = caller_severity(t)
-                st.markdown("\n".join([where, f"- **Severity:** {day_live.SEVERITY_LABELS[sev]}",
-                                        nearest]))
-            st.caption(f"Caller said: “{t['details']}”")
-            if on_add is not None:
-                added = call_id in st.session_state.get("added_calls", set())
-                if st.button("Added to today's plan" if added else "Add to today's plan", type="primary",
-                             icon=":material/check:" if added else ":material/playlist_add:", disabled=added,
-                             key=f"add_call_{call_id}", width="stretch"):
-                    on_add(call_id, t)
-                    st.rerun(scope="app")  # this runs inside the live fragment: refresh the whole page
-                result = st.session_state.get("added_effects", {}).get(call_id)
-                if result:
-                    st.success(result, icon=":material/check_circle:")
-
-
-def caller_severity(ticket: dict) -> int:
-    """A caller ticket's severity on the live-day scale: type weight 3 -> high (2), 2 -> routine (1), 1 -> low (0)."""
-    return max(0, min(2, int(round(ticket["P"])) - 1))
-
-
-def render_caller_intake(plan: dict, on_add=None) -> None:
-    """Caller report: talk (or type) to the 311 agent until it knows what the problem is and exactly where."""
-    if intake is None:
-        st.caption("Caller intake isn't available (dispatch/intake.py failed to import).")
-        return
-    ss_ = st.session_state
-    ss_.caller_plan = plan
-    if not ss_.get("call_id") or voice_server.get(ss_.call_id) is None:
-        _new_call(greet=False)
-    use_voice = voice.has_voice_key()
-    port = voice_api_port()
-
-    st.caption("Talk to the 311 agent as the caller. It asks follow-up questions until it knows what the "
-               "problem is and exactly where, then logs a scored ticket.")
-    if port:
-        hint = ("Natural voice: ElevenLabs." if use_voice else
-                "Voice: your browser's built-in voice. Add ELEVENLABS_API_KEY to .env for a natural voice.")
-        html = (VOICE_WIDGET.read_text(encoding="utf-8").replace("__API__", f"http://127.0.0.1:{port}")
-                .replace("__CALL__", ss_.call_id).replace("__OPENING__", json.dumps(intake.OPENING))
-                .replace("__VOICE__", hint + " Works in Chrome or Edge; allow the microphone when asked."))
-        components.html(html, height=104)
-    else:
-        st.caption(":material/mic_off: The voice service couldn't start (no free port from 8502). Type below.")
-
-    c_speak, c_new = st.columns([3, 2], vertical_alignment="center")
-    c_speak.toggle("Read typed replies aloud", key="speak_replies", value=False,
-                   help="For typed messages. The voice call always speaks its replies.")
-    c_new.button("New call", icon=":material/restart_alt:", on_click=_new_call, key="new_call", width="stretch")
-
-    st.fragment(_render_call, run_every=1.0)(ss_.call_id, plan, on_add)
-
-    text = ss_.pop("speak_text", None)
-    if text and ss_.get("speak_replies"):
-        _speak_once(text, use_voice)
-    call = voice_server.get(ss_.call_id)
-    if call and not call["done"]:
-        st.chat_input("Or type what the caller says...", key=f"caller_msg_{ss_.call_id}",
-                      on_submit=_typed, args=(plan,))
-
-
 def render_crew_list(plan: dict, out_crews: set) -> None:
     """Crew titles only: colour dot, Crew N, zone. Clicking one switches to it."""
     with st.container(horizontal=True, vertical_alignment="center"):
@@ -1052,7 +882,9 @@ def render_crew_list(plan: dict, out_crews: set) -> None:
 
 # --- page ------------------------------------------------------------------
 
-st.set_page_config(page_title="311 Dispatch Agent", layout="wide")
+ASSETS = ROOT / "dispatch" / "assets"
+st.set_page_config(page_title="City Link", page_icon=str(ASSETS / "citylink_icon.png"), layout="wide")
+st.logo(str(ASSETS / "citylink_logo.png"), icon_image=str(ASSETS / "citylink_icon.png"), size="large")
 data = load_outputs(outputs_stamp())
 metrics = data["metrics"]
 ss = st.session_state
@@ -1146,18 +978,6 @@ def _place_pending(lat: float, lon: float) -> None:
     day_live.finish_location(job, lat, lon, "map click")
     _apply({**ss.pending["event"], "source": ss.pending["event"].get("source")}, ss.pending["received"])
 
-def _add_call(call_id: str, ticket: dict) -> None:
-    """Put a caller's logged report on today's plan as a new job (located already), then replan."""
-    spec = day_live.make_job_spec(ticket["type"], caller_severity(ticket), ticket["where"], ticket["community"],
-                                  ticket["details"])
-    day_live.finish_location(spec, ticket["lat"], ticket["lon"], "caller report (OpenStreetMap)")
-    _apply({"event": "new_job", "job": spec, "crew": None, "capacity": 1.0, "question": None, "source": "caller"},
-           f"Caller: {ticket['details']}")
-    ss.added_calls = ss.get("added_calls", set()) | {call_id}
-    effect = (ss.applied or {}).get("effect") or "Added to today's plan; the day was replanned."
-    ss.added_effects = {**ss.get("added_effects", {}), call_id: effect}
-
-
 def _cancel_pending() -> None:
     ss.pending = None
 
@@ -1189,18 +1009,18 @@ if ss.locating:  # find the address (can take a few seconds), else ask for a cli
     st.rerun()
 
 
-st.title("Who should 311 send next?")
-st.caption("Calgary Roads dispatch · 8 crews, 32 workers · Open Calgary 311 tickets (Aug 25–27, 2026), "
+st.title("City Link")
+st.caption("Who should 311 send next? · Calgary Roads dispatch · 8 crews, 32 workers · Open Calgary 311 tickets (Aug 25–27, 2026), "
            "planned for Aug 28, 2026")
 if data["fake"]:
     st.warning("Showing sample data: run `python -m dispatch.run` to generate dispatch/outputs/.")
 
 timeline = day_timeline(data["plan_8am"], metrics, ss.log) if day_live else []
 tab_labels = [":material/local_shipping: Dispatch", f":material/campaign: Briefings ({len(timeline)})",
-              ":material/insights: Analysis", ":material/call: Caller report"]
+              ":material/insights: Analysis"]
 # The Briefings label changes with each update, which resets the tabs; stay on the tab the user had open.
 _was = (ss.get("main_tab") or "").split(" (")[0]
-tab_dispatch, tab_briefings, tab_analysis, tab_caller = st.tabs(
+tab_dispatch, tab_briefings, tab_analysis = st.tabs(
     tab_labels, default=next((t for t in tab_labels if _was and t.split(" (")[0] == _was), None),
     key="main_tab", on_change="rerun")
 
@@ -1365,10 +1185,3 @@ with tab_briefings:
 # --- analysis: the case for the agent ------------------------------------------------
 with tab_analysis:
     render_analysis(data, metrics)
-
-
-# --- caller report: talk to the 311 agent; a logged call can go onto today's plan --------------
-with tab_caller:
-    st.subheader("Caller report")
-    render_caller_intake(ss.noon["plan"] if ss.noon and "plan" in ss.noon else data["plan_8am"],
-                         on_add=_add_call if day_live else None)

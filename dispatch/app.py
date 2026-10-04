@@ -820,16 +820,40 @@ def jobs_by_type_chart(ours: Counter, theirs: Counter):
 
 
 FLOW = ROOT / "dispatch" / "flow.mmd"
-MERMAID_PAGE = """<pre class="mermaid">__SRC__</pre>
+MERMAID_PAGE = """<link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700&display=swap" rel="stylesheet">
+<pre class="mermaid">__SRC__</pre>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<div class="legend">
+  <span><i style="background:#eef2ff;border-color:#6366f1"></i>Data</span>
+  <span><i style="background:#fff;border-color:#64748b"></i>Planning</span>
+  <span><i style="background:#ecfdf5;border-color:#10b981"></i>During the day</span>
+  <span><i style="background:#fffbeb;border-color:#f59e0b"></i>What the supervisor sees</span>
+</div>
 <script>
-  mermaid.initialize({startOnLoad: true, theme: "base", securityLevel: "strict",
-    flowchart: {curve: "basis", htmlLabels: true, nodeSpacing: 40, rankSpacing: 46},
-    themeVariables: {fontFamily: "'Source Sans Pro', 'Source Sans 3', system-ui, sans-serif", fontSize: "15px",
-                     lineColor: "#8a8a8a", edgeLabelBackground: "#ffffff"}});
+  mermaid.initialize({startOnLoad: false, theme: "base", securityLevel: "strict",
+    flowchart: {curve: "basis", htmlLabels: true, nodeSpacing: 34, rankSpacing: 60, padding: 16},
+    themeVariables: {fontFamily: "Inter, system-ui, sans-serif", fontSize: "15px", lineColor: "#94a3b8",
+                     edgeLabelBackground: "#ffffff"}});
+  // measure the boxes with the real font, or labels get clipped
+  document.fonts.load("600 15px Inter").catch(() => {}).then(() => mermaid.run());
 </script>
-<style>body { margin: 0; background: transparent; } pre.mermaid { display: flex; justify-content: center; margin: 0; }</style>
+<style>
+  body { margin: 0; background: transparent; font-family: Inter, system-ui, sans-serif; }
+  pre.mermaid { display: flex; justify-content: center; margin: 0; }
+  .node rect, .node path { stroke-width: 1.5px !important; }
+  .node rect { rx: 12px; ry: 12px; }
+  .nodeLabel { font-weight: 600; }
+  .edgeLabel, .edgeLabel p { font-weight: 600; color: #059669; font-size: 13px; }
+  .flowchart-link { stroke-width: 1.6px !important; }
+  .legend { display: flex; justify-content: center; flex-wrap: wrap; gap: 6px 18px; margin-top: 10px;
+            font-size: 13px; color: #64748b; }
+  .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 4px; border: 1.5px solid;
+              margin-right: 6px; vertical-align: -1px; }
+</style>
 """
+
+
+DIAGRAM_HEIGHT = 330
 
 
 def render_flow_diagram() -> None:
@@ -840,9 +864,9 @@ def render_flow_diagram() -> None:
     except OSError:
         st.caption("dispatch/flow.mmd is missing.")
         return
-    components.html(MERMAID_PAGE.replace("__SRC__", html.escape(src)), height=760)
-    st.caption("White: the planning pipeline. Green: what changes the plan during the day (crew updates and caller "
-               "reports), read by the AI agent and fed back in as a replan. Yellow: what the supervisor sees.")
+    components.html(MERMAID_PAGE.replace("__SRC__", html.escape(src)), height=DIAGRAM_HEIGHT)
+    st.caption("The morning plan ranks today's 311 tickets and gives each crew its jobs. When a crew changes or an "
+               "urgent job comes in (typed or from a caller), the AI agent reads it and the plan is rebuilt.")
     with st.expander("Mermaid source", icon=":material/code:"):
         st.code(src, language="text")
 

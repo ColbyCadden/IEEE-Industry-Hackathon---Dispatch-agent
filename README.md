@@ -62,8 +62,8 @@ flowchart LR
 | Metrics | `dispatch/metrics.py` | P served, safety count, jobs, moved, dropped, safety dropped |
 | Language | `dispatch/llm.py` | Claude turns a free-text sick call into a structured event and writes the briefings; regex and template fallbacks run without a key or network |
 | Pipeline | `dispatch/run.py` | Runs everything; writes `dispatch/outputs/*.json`, including the 8 a.m. and noon briefings |
-| Caller intake | `dispatch/intake.py` | 311 call-taker chat prototype (not shown in the dashboard): asks follow-ups until it knows what the problem is and exactly where, then scores the ticket |
-| Voice | `dispatch/voice_server.py`, `voice_call.html`, `voice.py` | Voice-call prototype for the caller intake (not shown in the dashboard) |
+| Caller intake | `dispatch/intake.py` | 311 call-taker (dashboard **Caller report** tab): asks follow-ups until it knows what the problem is and exactly where, then scores the ticket |
+| Voice | `dispatch/voice_server.py`, `voice_call.html`, `voice.py` | Hands-free voice call for the caller intake (Caller report tab); natural voice with ELEVENLABS_API_KEY in .env, else the browser voice |
 | Dashboard | `dispatch/app.py` | Streamlit, three tabs. **Dispatch**: today's plan, map, crews and the update → replan loop. **Briefings**: the 8 a.m. briefing, one briefing per update, and an end-of-day overview. **Analysis**: agent vs FIFO on safety coverage, priority per crew and travel |
 
 The planning is deterministic code. Claude only reads the supervisor's message and writes the

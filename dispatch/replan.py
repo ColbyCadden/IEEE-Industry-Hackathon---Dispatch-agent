@@ -4,14 +4,15 @@ import math
 
 from dispatch.assign import JOBS_PER_CREW
 
-NEAREST_CREWS = 3  # a displaced job may only move to one of this many nearest crews
+NEAREST_CREWS = 4  # a displaced job may only move to one of this many nearest crews
 
 
 def apply_event(plan: dict, event: dict, jobs: int = JOBS_PER_CREW) -> tuple[dict, dict]:
     """Return (new_plan, changes); changes = {"moved": [{"id","from","to"}], "dropped": [ids]}.
 
     changes also carries "dropped_jobs" (the dropped job dicts) so metrics can count safety_dropped.
-    crew_out: the crew loses all its jobs. crew_partial: it keeps its top round(jobs*capacity).
+    crew_out: the crew loses all its jobs. crew_partial: it keeps its top round(limit*capacity), where
+    limit is the crew's own job limit (plans with flexible crews) or `jobs`.
     Each displaced job (P desc) tries the NEAREST_CREWS nearest other crews by centroid, nearest
     first: it takes a free slot if there is one, else swaps out that crew's lowest-P job if it is
     strictly lower (the bumped job is dropped). A job none of them will take is dropped.
@@ -31,8 +32,8 @@ def apply_event(plan: dict, event: dict, jobs: int = JOBS_PER_CREW) -> tuple[dic
     capacity = float(event.get("capacity", 0.0))
     if not 0.0 <= capacity <= 1.0:
         raise ValueError(f"capacity must be between 0 and 1, got {capacity}")
-    keep = 0 if kind == "crew_out" else round(jobs * capacity)
     out_crew = crews[out_id]
+    keep = 0 if kind == "crew_out" else round(out_crew.get("limit", jobs) * capacity)
     out_crew["jobs"].sort(key=lambda j: j["P"], reverse=True)
     displaced = out_crew["jobs"][keep:]
     out_crew["jobs"] = out_crew["jobs"][:keep]
@@ -56,7 +57,7 @@ def _place(job: dict, others: list[dict], jobs: int) -> tuple[dict | None, dict 
     """Put job on one of the nearest crews with room or a strictly lower-P job. Return (crew, bumped)."""
     nearest = sorted(others, key=lambda c: _dist(job, c["centroid"]))[:NEAREST_CREWS]
     for crew in nearest:
-        if len(crew["jobs"]) < jobs:
+        if len(crew["jobs"]) < crew.get("limit", jobs):
             crew["jobs"].append(job)
             return crew, None
         # lowest P; on ties, the job added last (lowest in the original order)

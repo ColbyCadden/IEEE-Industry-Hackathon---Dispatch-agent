@@ -7,22 +7,30 @@ behind yesterday's parking complaint. This agent scores open 311 tickets by haza
 of work to 8 crews × 5 jobs, and replans when a crew calls in sick. It then tells the Roads
 supervisor what changed, in plain English.
 
-## Results (frozen sample, same crews and zones for both plans)
+## Results (frozen sample, same 8 crews and 32 workers for both plans)
 
-| 8 crews × 5 jobs | Oldest-first (FIFO) | Agent, 8 a.m. | Agent, noon (crew 4 out) |
+| 8 crews, 32 workers | Oldest-first (FIFO, 8 × 5) | Agent, 8 a.m. | Agent, noon (crew 4 out) |
 |---|---|---|---|
 | Safety tickets covered (30 in the backlog) | 16 | **30** | **30** |
-| Total priority P served | 99.0 | **125.75** | 112.75 |
-| Jobs on the plan | 40 | 40 | 35 |
-| Moved to another crew / dropped | — | — | 2 / 5 (**0 safety dropped**) |
+| Total priority P served | 99.0 | **140.75** | 130.0 |
+| Jobs on the plan | 40 | **48** | 42 |
+| Moved to another crew / dropped | — | — | 6 / 6 (**0 safety dropped**) |
 
 - **Data:** 200 raw tickets → 122 open → 104 after merging duplicate reports → 99 field-crew
   tickets (licence inspections and seniors' inquiries aren't field-crew work).
 - **Robustness:** we changed every type weight by ±1 (16 variations). The agent beat FIFO on
-  safety in all 16, by +9 to +15 tickets (`python -m tests.sensitivity`).
-- **Improvement round:** the first replan let a displaced job bump work anywhere in the city.
-  One job travelled 34.9 km. Limiting moves to the 3 nearest crews keeps moves to 11–12 km,
-  costs 0.75 P, and still drops no safety ticket.
+  safety in all 16, by +12 to +15 tickets (`python -m tests.sensitivity`).
+- **Compact crews:** each crew gets one tight cluster of jobs, grouped to minimise driving.
+  Straight-line driving fell from 4.2 km to 2.9 km per job, and no crew's jobs are more than
+  13 km apart (it was 27 km).
+- **Flexible crews:** the same 32 workers are split by workload (3 to 6 per crew today), and a
+  crew's job limit follows its size plus its short hops (jobs within 1 km of each other), up to
+  7 jobs. The agent covers 48 jobs instead of 40 with the same people, keeps all 30 safety
+  tickets, and losing any one crew drops 1 safety ticket in total across all 8 possible cases
+  (19 under the original zones). Oldest-first keeps standard crews (4 people, 5 jobs).
+- **Improvement round:** the first replan let a displaced job bump work anywhere in the city
+  (one job travelled 34.9 km). Moves are now limited to the 4 nearest crews, and the crew-4
+  replan still drops no safety ticket.
 - **Starter bug we caught:** the starter's `"ice" in name` check matches "Serv**ice**s" and
   "L**ice**nce". Its "priority" plan spent 28 of 40 slots on cart deliveries, commercial
   collection and licence inspections, and scheduled 23 already-closed tickets.
@@ -33,12 +41,12 @@ supervisor what changed, in plain English.
 flowchart LR
   A[311 CSV<br/>frozen sample] --> B[Clean<br/>drop Closed,<br/>merge duplicates]
   B --> C[Score<br/>P = weight + 0.25·days + 0.5·extra reports]
-  C --> D[Zone crews<br/>KMeans on lat/lon, seeded]
+  C --> D[Compact crews<br/>8 tight groups of 5,<br/>least driving]
   D --> E[Assign<br/>priority order vs FIFO,<br/>same fill function]
   E --> F[8 a.m. plan + briefing]
   G[Sick call, free text] --> H[Parse<br/>Claude, regex fallback]
   H --> I[Supervisor confirms]
-  I --> J[Replan<br/>bump lowest-P job,<br/>3 nearest crews only]
+  I --> J[Replan<br/>bump lowest-P job,<br/>4 nearest crews only]
   F --> J
   J --> K[Noon plan + briefing<br/>moved / dropped counts]
 ```
@@ -48,8 +56,8 @@ flowchart LR
 | Clean | `dispatch/data_prep.py` | Loads the CSV, drops Closed tickets, merges duplicate reports (same type, same spot to ~1 m) into one job with a `reports` count |
 | Weights | `dispatch/weights.py` | One reviewable table: 3 = safety hazard, 2 = road hazard, 1 = service, 0 = not a field-crew job; a reason for every weight |
 | Score | `dispatch/scoring.py` | P = weight + 0.25 × days open + 0.5 × (reports − 1) |
-| Assign | `dispatch/assign.py` | KMeans zones (seeded); walks tickets in priority or FIFO order and gives each to the nearest crew with room |
-| Replan | `dispatch/replan.py` | Removes the sick crew's jobs; each one, highest P first, may bump a strictly lower-P job from one of its 3 nearest crews; logs moved/dropped |
+| Assign | `dispatch/assign.py` | Takes the top 40 tickets in priority or FIFO order and splits them into 8 compact groups that minimise driving (capacitated k-means with optimal Hungarian assignment, seeded). For the agent, the 32 workers are then split by workload and each crew's job limit follows its size and short hops (max 7), filled with the next tickets nearby. Jobs are listed in driving order |
+| Replan | `dispatch/replan.py` | Removes the sick crew's jobs; each one, highest P first, may bump a strictly lower-P job from one of its 4 nearest crews; logs moved/dropped |
 | Metrics | `dispatch/metrics.py` | P served, safety count, jobs, moved, dropped, safety dropped |
 | Language | `dispatch/llm.py` | Claude turns a free-text sick call into a structured event and writes the briefings; regex and template fallbacks run without a key or network |
 | Pipeline | `dispatch/run.py` | Runs everything; writes `dispatch/outputs/*.json`, including the 8 a.m. and noon briefings |

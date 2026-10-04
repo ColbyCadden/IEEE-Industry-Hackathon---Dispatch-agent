@@ -1,8 +1,8 @@
 {
   "8am": {
-    "P": 125.75,
+    "P": 140.75,
     "safety": 30,
-    "n": 40
+    "n": 48
   },
   "fifo": {
     "P": 99.0,
@@ -10,66 +10,87 @@
     "n": 40
   },
   "noon": {
-    "P": 112.75,
+    "P": 130.0,
     "safety": 30,
-    "n": 35,
-    "moved": 2,
-    "dropped": 5,
+    "n": 42,
+    "moved": 6,
+    "dropped": 6,
     "safety_dropped": 0
   },
   "changes": {
     "moved": [
       {
-        "id": "26-00654470",
-        "from": 4,
-        "to": 5
-      },
-      {
         "id": "26-00655098",
         "from": 4,
         "to": 5
-      }
-    ],
-    "dropped": [
-      "26-00653375",
-      "26-00651966",
-      "26-00654890",
-      "26-00648442",
-      "26-00652057"
-    ],
-    "dropped_jobs": [
-      {
-        "id": "26-00653375",
-        "type": "Debris",
-        "service_name": "Roads - Debris on Street/Sidewalk/Boulevard",
-        "community": "SILVERADO",
-        "P": 2.75,
-        "safety": false,
-        "lat": 50.88298604108047,
-        "lon": -114.07129694074862,
-        "reports": 2
       },
       {
-        "id": "26-00651966",
-        "type": "Debris",
-        "service_name": "Roads - Debris on Street/Sidewalk/Boulevard",
-        "community": "SUNNYSIDE",
-        "P": 2.75,
-        "safety": false,
-        "lat": 51.05641953428092,
-        "lon": -114.07902910746358,
-        "reports": 2
+        "id": "26-00654470",
+        "from": 4,
+        "to": 3
+      },
+      {
+        "id": "26-00652996",
+        "from": 4,
+        "to": 3
       },
       {
         "id": "26-00654890",
-        "type": "Traffic sign",
-        "service_name": "Roads - Signs - Traffic and Roadmarking",
-        "community": "HOTCHKISS",
-        "P": 2.75,
+        "from": 4,
+        "to": 3
+      },
+      {
+        "id": "26-00653375",
+        "from": 4,
+        "to": 6
+      },
+      {
+        "id": "26-00653848",
+        "from": 4,
+        "to": 1
+      }
+    ],
+    "dropped": [
+      "26-00655495",
+      "26-00654863",
+      "26-00654418",
+      "26-00648442",
+      "26-00654389",
+      "26-00652792"
+    ],
+    "dropped_jobs": [
+      {
+        "id": "26-00655495",
+        "type": "Residential waste",
+        "service_name": "WRS - Waste - Residential",
+        "community": "SOUTHWOOD",
+        "P": 1.25,
         "safety": false,
-        "lat": 50.91419352023465,
-        "lon": -113.89624948761448,
-        "reports": 2
+        "lat": 50.957758808343314,
+        "lon": -114.08319427981304,
+        "reports": 1
+      },
+      {
+        "id": "26-00654863",
+        "type": "Parking sign",
+        "service_name": "Roads - Signs - Parking",
+        "community": "INGLEWOOD",
+        "P": 1.25,
+        "safety": false,
+        "lat": 51.03414052413669,
+        "lon": -114.01912581291118,
+        "reports": 1
+      },
+      {
+        "id": "26-00654418",
+        "type": "Debris",
+        "service_name": "Roads - Debris on Street/Sidewalk/Boulevard",
+        "community": "FOREST LAWN",
+        "P": 2.25,
+        "safety": false,
+        "lat": 51.03784804860796,
+        "lon": -113.9700019179966,
+        "reports": 1
       },
       {
         "id": "26-00648442",
@@ -83,14 +104,25 @@
         "reports": 1
       },
       {
-        "id": "26-00652057",
+        "id": "26-00654389",
         "type": "Debris",
         "service_name": "Roads - Debris on Street/Sidewalk/Boulevard",
-        "community": "MCCALL",
+        "community": "ASPEN WOODS",
         "P": 2.25,
         "safety": false,
-        "lat": 51.088997572302425,
-        "lon": -114.02708650389776,
+        "lat": 51.04521537783425,
+        "lon": -114.20838662695292,
+        "reports": 1
+      },
+      {
+        "id": "26-00652792",
+        "type": "Parking sign",
+        "service_name": "Roads - Signs - Parking",
+        "community": "HORIZON",
+        "P": 1.25,
+        "safety": false,
+        "lat": 51.08990020616713,
+        "lon": -113.99169523733028,
         "reports": 1
       }
     ]

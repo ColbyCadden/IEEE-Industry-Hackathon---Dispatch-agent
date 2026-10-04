@@ -33,8 +33,9 @@ def test_new_emergency_goes_to_top_and_nobody_is_lost():
     placed = [j for c in day["plan"]["crews"] for j in c["jobs"] if j.get("new")]
     assert len(placed) == 1 and placed[0]["P"] > max(j["P"] for c in PLAN["crews"] for j in c["jobs"])
     everyone = [j["id"] for c in day["plan"]["crews"] for j in c["jobs"]] + [j["id"] for j in day["deferred"]]
-    assert len(everyone) == len(set(everyone)) == 41          # 40 original jobs + 1 new, none duplicated or lost
-    assert all(len(c["jobs"]) <= 5 for c in day["plan"]["crews"])
+    original = sum(len(c["jobs"]) for c in PLAN["crews"])
+    assert len(everyone) == len(set(everyone)) == original + 1  # every original job + 1 new, none duplicated or lost
+    assert all(len(c["jobs"]) <= day["slots"][c["crew"]] for c in day["plan"]["crews"])
 
 
 def test_out_crew_never_receives_new_jobs():
@@ -50,10 +51,11 @@ def test_updates_stack_and_crew_can_return():
            {"event": "crew_partial", "crew": 2, "capacity": 0.5},
            {"event": "crew_partial", "crew": 4, "capacity": 1.0}]
     day = live.replay(PLAN, log)
-    assert day["slots"] == {1: 5, 2: 2, 3: 5, 4: 5, 5: 5, 6: 5, 7: 5, 8: 5}
+    full = {c["crew"]: c.get("limit", 5) for c in PLAN["crews"]}
+    assert day["slots"] == {**full, 2: round(full[2] * 0.5)}      # crew 2 at half its limit, crew 4 back in full
     assert len(day["plan"]["crews"][3]["jobs"]) > 0            # crew 4 took deferred work back
     total = sum(len(c["jobs"]) for c in day["plan"]["crews"]) + len(day["deferred"])
-    assert total == 41
+    assert total == sum(len(c["jobs"]) for c in PLAN["crews"]) + 1
     m = compute(day["plan"], live.changes_of(day))
     assert m["n"] == sum(len(c["jobs"]) for c in day["plan"]["crews"])
 

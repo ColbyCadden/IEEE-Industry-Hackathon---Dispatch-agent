@@ -276,6 +276,12 @@ def find_crew(plan: dict, crew_id: int | None) -> dict | None:
 
 # --- view helpers ------------------------------------------------------------
 
+def crew_limit(crew_id: int | None) -> int:
+    """A crew's 8 a.m. job limit (flexible crews), or 5 for a standard crew."""
+    c = find_crew(data["plan_8am"], crew_id) if crew_id else None
+    return int(c.get("limit", 5)) if c else 5
+
+
 def describe(event: dict) -> str:
     kind, crew = event.get("event"), event.get("crew")
     if kind == "new_job":
@@ -290,7 +296,7 @@ def describe(event: dict) -> str:
     if kind == "crew_partial":
         cap = event.get("capacity", 0.5)
         return (f"Crew {crew} is **short-handed** ({cap:.0%} capacity). "
-                f"It keeps its top {round(5 * cap)} jobs; the rest will be reassigned or deferred.")
+                f"It keeps its top {round(crew_limit(crew) * cap)} jobs; the rest will be reassigned or deferred.")
     return "I couldn't tell what changed."
 
 
@@ -362,7 +368,8 @@ def render_crew_panel(crew: dict, changes: dict | None, out_crews: set) -> None:
         if not jobs:
             st.caption(f"Zone {crew['zone']} · " + ("out today, no jobs" if crew["crew"] in out_crews else "no jobs"))
             return
-        st.caption(f"Zone {crew['zone']} · {len(jobs)} jobs · {sum(j['safety'] for j in jobs)} safety · "
+        st.caption(f"Zone {crew['zone']} · {crew.get('workers', 4)} people · {len(jobs)} of {crew.get('limit', 5)} jobs · "
+                   f"{sum(j['safety'] for j in jobs)} safety · "
                    "priority out of 10 on the right")
         for rank, j in enumerate(jobs, 1):
             chosen = j["id"] == st.session_state.selected_job
@@ -565,7 +572,7 @@ def render_improvement(metrics: dict) -> None:
     """The improvement story in one row: oldest-first -> our 8 a.m. plan -> after a crew drops out."""
     fifo, am, noon = metrics.get("fifo"), metrics.get("8am"), metrics.get("noon")
     event = load_event() or {"crew": 4}
-    st.markdown("**Improvement round:** baseline → our plan → after the crew update (8 crews × 5 jobs)")
+    st.markdown("**Improvement round:** baseline → our plan → after the crew update (same 32 workers)")
     c1, c2, c3 = st.columns(3)
     c1.markdown(_stage_html("1 BASELINE · OLDEST-FIRST", str(fifo["safety"]), f"of {fifo['n']}",
                             ["jobs are safety tickets", f"total P {fifo['P']:.2f}"], FIFO_COLOR),
@@ -740,7 +747,7 @@ def render_status(plan: dict, m: dict, n_updates: int) -> None:
                             "all crews out on jobs" if working == len(plan["crews"]) else "a crew is out today"),
                 unsafe_allow_html=True)
     c2.markdown(_count_html("Jobs on the plan", str(m["n"]),
-                            f"{len(plan['crews'])} crews × 5 slots" if not n_updates else
+                            f"{sum(c.get('workers', 4) for c in plan['crews'])} workers across {len(plan['crews'])} crews" if not n_updates else
                             f"after {n_updates} update{'s' if n_updates != 1 else ''}"), unsafe_allow_html=True)
     c3.markdown(_count_html("Safety tickets", str(m["safety"]), "potholes and missing or damaged signs"),
                 unsafe_allow_html=True)
@@ -795,7 +802,7 @@ def jobs_by_type_chart(ours: Counter, theirs: Counter):
 def render_analysis(data: dict, metrics: dict) -> None:
     """How the agent changes what maintenance crews spend their day on, versus oldest-first."""
     st.subheader("How the agent improves crew efficiency")
-    st.caption("Same 8 crews, same zones, same 99 field-crew tickets. The only difference is the order the "
+    st.caption("Same 8 crews, same assignment method, same 99 field-crew tickets. The only difference is the order the "
                "work is chosen in.")
     render_metrics("Agent", metrics["8am"], metrics["fifo"], metrics["8am"], metrics)
     render_improvement(metrics)
@@ -861,7 +868,8 @@ def render_crew_list(plan: dict, out_crews: set) -> None:
             is_sel = c["crew"] == st.session_state.selected_crew
             with st.container(horizontal=True, vertical_alignment="center", gap="small"):
                 st.markdown(dot(c["crew"]), unsafe_allow_html=True, width="content")
-                label = f"**Crew {c['crew']}** · {c['zone']}" + (" · out today" if c["crew"] in out_crews else "")
+                label = (f"**Crew {c['crew']}** · {c['zone']} · {c.get('workers', 4)} people"
+                         + (" · out today" if c["crew"] in out_crews else ""))
                 st.button(label, key=f"crew_{c['crew']}", type="secondary" if is_sel else "tertiary",
                           on_click=select_crew, args=(c["crew"],))
 
@@ -911,7 +919,7 @@ def _apply(event: dict, received: str) -> None:
     ss.parsed = ss.parse_error = ss.pending = ss.locating = None
     ss.pop("view", None)
     if (entry["event"] == "crew_partial" and float(entry.get("capacity", 0.0)) >= 1.0
-            and day_live.slots_now(data["plan_8am"], ss.log).get(entry["crew"], 5) >= 5):
+            and day_live.slots_now(data["plan_8am"], ss.log).get(entry["crew"], 5) >= crew_limit(entry["crew"])):
         ss.applied = {"event": event, "received": received, "noop": True,
                       "effect": f"Crew {entry['crew']} was already at full strength, so nothing changed."}
         return
@@ -994,7 +1002,7 @@ if ss.locating:  # find the address (can take a few seconds), else ask for a cli
 
 
 st.title("Who should 311 send next?")
-st.caption("Calgary Roads dispatch · 8 crews × 5 jobs · Open Calgary 311 tickets (Aug 25–27, 2026), "
+st.caption("Calgary Roads dispatch · 8 crews, 32 workers · Open Calgary 311 tickets (Aug 25–27, 2026), "
            "planned for Aug 28, 2026")
 if data["fake"]:
     st.warning("Showing sample data: run `python -m dispatch.run` to generate dispatch/outputs/.")

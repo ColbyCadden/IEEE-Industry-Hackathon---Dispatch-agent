@@ -53,10 +53,13 @@ def test_every_csv_type_has_weight():
     assert not missing, f"no weight for: {sorted(missing)}"
 
 
-def test_plans_at_most_40_jobs():
-    for name, plan in zip(("agent", "fifo"), plans()):
-        n = len(job_ids(plan))
-        assert n <= CREWS * JOBS, f"{name} plan has {n} jobs"
+def test_plans_within_capacity():
+    """Oldest-first fills 8 x 5; the agent's flexible crews stay within their limits (at most 7 each)."""
+    from dispatch.assign import MAX_JOBS
+    agent, fifo = plans()
+    assert len(job_ids(fifo)) <= CREWS * JOBS, f"fifo plan has {len(job_ids(fifo))} jobs"
+    n = len(job_ids(agent))
+    assert n <= sum(c["limit"] for c in agent["crews"]) <= CREWS * MAX_JOBS, f"agent plan has {n} jobs"
 
 
 def test_no_ticket_assigned_twice():
@@ -66,18 +69,25 @@ def test_no_ticket_assigned_twice():
         assert not dups, f"{name} plan assigns twice: {dups}"
 
 
-def test_no_crew_over_5_jobs():
-    for name, plan in zip(("agent", "fifo"), plans()):
-        over = {c["crew"]: len(c["jobs"]) for c in plan["crews"] if len(c["jobs"]) > JOBS}
-        assert not over, f"{name} plan crews over {JOBS}: {over}"
+def test_no_crew_over_its_limit():
+    """Every crew stays within its own job limit; oldest-first crews are standard (4 people, 5 jobs)."""
+    from dispatch.assign import MAX_JOBS
+    agent, fifo = plans()
+    for name, plan in (("agent", agent), ("fifo", fifo)):
+        over = {c["crew"]: (len(c["jobs"]), c["limit"]) for c in plan["crews"] if len(c["jobs"]) > c["limit"]}
+        assert not over, f"{name} plan crews over their limit: {over}"
+        assert all(c["limit"] <= MAX_JOBS for c in plan["crews"]), f"{name} plan has a limit over {MAX_JOBS}"
+    assert all((c["workers"], c["limit"]) == (4, JOBS) for c in fifo["crews"]), "fifo crews are not standard"
 
 
 def test_fifo_and_agent_same_settings():
+    """Same crews, same 32 workers, same grouping code. Zones follow each plan's own jobs (compact crews)."""
     agent, fifo = plans()
     assert [c["crew"] for c in agent["crews"]] == [c["crew"] for c in fifo["crews"]], "different crew lists"
     assert len(agent["crews"]) == CREWS, f"agent has {len(agent['crews'])} crews"
-    assert [c.get("zone") for c in agent["crews"]] == [c.get("zone") for c in fifo["crews"]], "different zones"
-    assert len(job_ids(agent)) == len(job_ids(fifo)), "plans fill a different number of slots"
+    assert sum(c["workers"] for c in agent["crews"]) == sum(c["workers"] for c in fifo["crews"]) == CREWS * 4,         "plans use a different workforce"
+    from dispatch.assign import make_plan
+    assert make_plan(scored(), order="fifo", crews=CREWS, jobs=JOBS) == fifo, "fifo plan not built by make_plan"
 
 
 def test_crew_out_leaves_crew_empty():
@@ -108,10 +118,10 @@ def test_verified_numbers():
     agent, fifo = plans()
     new_plan, changes = replanned()
     assert len(scored()) == 99, f"{len(scored())} field-crew tickets, expected 99"
-    assert compute(agent) == {"P": 125.75, "safety": 30, "n": 40}, compute(agent)
+    assert compute(agent) == {"P": 140.75, "safety": 30, "n": 48}, compute(agent)
     assert compute(fifo) == {"P": 99.0, "safety": 16, "n": 40}, compute(fifo)
     noon = compute(new_plan, changes)
-    assert (noon["n"], noon["moved"], noon["dropped"], noon["safety_dropped"]) == (35, 2, 5, 0), noon
+    assert (noon["n"], noon["moved"], noon["dropped"], noon["safety_dropped"]) == (42, 6, 6, 0), noon
 
 
 def test_plans_are_deterministic():

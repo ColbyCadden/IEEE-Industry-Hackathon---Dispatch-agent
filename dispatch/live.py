@@ -14,7 +14,8 @@ Events (all plain dicts):
   {"event": "new_job", "job": {"label", "severity", "lat", "lon", ...}}
 
 Rules (deterministic, no model involved):
-  * A crew works round(5 * capacity) jobs; a crew that is out works 0.
+  * A crew works round(limit * capacity) jobs, limit being its 8 a.m. job limit (5 for a
+    standard crew); a crew that is out works 0.
   * A displaced job tries the 3 nearest crews that still have working slots: a free slot, else it
     replaces that crew's lowest-P job if that one is strictly lower (the replaced job is deferred).
   * A new job gets P from its severity (0-3). Emergencies (3) jump the queue: P is above every job
@@ -30,7 +31,7 @@ import urllib.request
 
 from dispatch.assign import JOBS_PER_CREW
 
-NEAREST_CREWS = 3          # a displaced or new job may only go to this many nearest working crews
+NEAREST_CREWS = 4          # a displaced or new job may only go to this many nearest working crews
 MAX_REFILL_KM = 12.0       # a returning crew only takes deferred jobs this close to its area
 SEVERITY_P = {0: 1.0, 1: 2.0, 2: 3.5}   # priority P for a job reported today (no days waiting yet)
 EMERGENCY_FLOOR = 4.5      # severity 3 gets at least this P, and always more than any job on the plan
@@ -50,7 +51,8 @@ def new_day(plan_8am: dict) -> dict:
     plan = copy.deepcopy(plan_8am)
     return {
         "plan": plan,
-        "slots": {c["crew"]: JOBS_PER_CREW for c in plan["crews"]},     # jobs each crew can work today
+        "slots": {c["crew"]: c.get("limit", JOBS_PER_CREW) for c in plan["crews"]},  # jobs each crew can work today
+        "full": {c["crew"]: c.get("limit", JOBS_PER_CREW) for c in plan["crews"]},   # its 8 a.m. job limit
         "origin": {j["id"]: c["crew"] for c in plan["crews"] for j in c["jobs"]},
         "moved": {},        # job id -> {"id", "from", "to"} net of everything so far
         "deferred": [],     # jobs not done today
@@ -114,7 +116,8 @@ def _set_capacity(day: dict, event: dict) -> dict:
     cap = float(event.get("capacity", 0.0))
     if not 0.0 <= cap <= 1.0:
         raise ValueError(f"capacity must be between 0 and 1, got {cap}")
-    new = 0 if kind == "crew_out" else (JOBS_PER_CREW if cap >= 1.0 else round(JOBS_PER_CREW * cap))
+    full = day.get("full", {}).get(crew_id, JOBS_PER_CREW)
+    new = 0 if kind == "crew_out" else (full if cap >= 1.0 else round(full * cap))
     old = day["slots"][crew_id]
     day["slots"][crew_id] = new
     effect = {"kind": kind, "crew": crew_id, "zone": crew["zone"], "slots": new, "was": old,

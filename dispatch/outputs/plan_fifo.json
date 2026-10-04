@@ -2,12 +2,58 @@
   "crews": [
     {
       "crew": 1,
-      "zone": "E",
+      "zone": "N",
       "centroid": [
-        51.054883,
-        -114.009292
+        51.048408,
+        -114.05822
       ],
+      "workers": 4,
+      "limit": 5,
       "jobs": [
+        {
+          "id": "26-00653909",
+          "type": "Commercial waste",
+          "service_name": "WRS - Commercial Collection Services",
+          "community": "CRESCENT HEIGHTS",
+          "P": 1.25,
+          "safety": false,
+          "lat": 51.05950171589272,
+          "lon": -114.06164731813936,
+          "reports": 1
+        },
+        {
+          "id": "26-00653674",
+          "type": "Debris",
+          "service_name": "Roads - Debris on Street/Sidewalk/Boulevard",
+          "community": "DOWNTOWN COMMERCIAL CORE",
+          "P": 3.25,
+          "safety": false,
+          "lat": 51.0472744358498,
+          "lon": -114.06959371115344,
+          "reports": 3
+        },
+        {
+          "id": "26-00654031",
+          "type": "Damaged sign",
+          "service_name": "Roads - Signs - Missing - Damaged",
+          "community": "DOWNTOWN COMMERCIAL CORE",
+          "P": 3.25,
+          "safety": true,
+          "lat": 51.0472744358498,
+          "lon": -114.06959371115344,
+          "reports": 1
+        },
+        {
+          "id": "26-00651657",
+          "type": "Damaged sign",
+          "service_name": "Roads - Signs - Missing - Damaged",
+          "community": "BELTLINE",
+          "P": 3.5,
+          "safety": true,
+          "lat": 51.03743796399198,
+          "lon": -114.0551860888619,
+          "reports": 1
+        },
         {
           "id": "26-00648442",
           "type": "Traffic sign",
@@ -17,6 +63,51 @@
           "safety": false,
           "lat": 51.05055069499901,
           "lon": -114.03507983816613,
+          "reports": 1
+        }
+      ]
+    },
+    {
+      "crew": 2,
+      "zone": "NE",
+      "centroid": [
+        51.094718,
+        -113.992259
+      ],
+      "workers": 4,
+      "limit": 5,
+      "jobs": [
+        {
+          "id": "26-00652792",
+          "type": "Parking sign",
+          "service_name": "Roads - Signs - Parking",
+          "community": "HORIZON",
+          "P": 1.25,
+          "safety": false,
+          "lat": 51.08990020616713,
+          "lon": -113.99169523733028,
+          "reports": 1
+        },
+        {
+          "id": "26-00654178",
+          "type": "Damaged sign",
+          "service_name": "Roads - Signs - Missing - Damaged",
+          "community": "HORIZON",
+          "P": 3.25,
+          "safety": true,
+          "lat": 51.08990020616713,
+          "lon": -113.99169523733028,
+          "reports": 1
+        },
+        {
+          "id": "26-00653018",
+          "type": "Parking sign",
+          "service_name": "Roads - Signs - Parking",
+          "community": "SOUTH AIRWAYS",
+          "P": 1.25,
+          "safety": false,
+          "lat": 51.07422107050224,
+          "lon": -114.00519380543584,
           "reports": 1
         },
         {
@@ -30,6 +121,29 @@
           "lon": -114.02708650389776,
           "reports": 1
         },
+        {
+          "id": "26-00653413",
+          "type": "Residential waste",
+          "service_name": "WRS - Waste - Residential",
+          "community": "SADDLE RIDGE",
+          "P": 1.25,
+          "safety": false,
+          "lat": 51.13057324276626,
+          "lon": -113.94562252266888,
+          "reports": 1
+        }
+      ]
+    },
+    {
+      "crew": 3,
+      "zone": "E",
+      "centroid": [
+        51.047265,
+        -113.96265
+      ],
+      "workers": 4,
+      "limit": 5,
+      "jobs": [
         {
           "id": "26-00652093",
           "type": "Damaged sign",
@@ -53,221 +167,61 @@
           "reports": 1
         },
         {
-          "id": "26-00652760",
+          "id": "26-00653629",
           "type": "Pothole",
           "service_name": "Roads - Pothole Maintenance",
-          "community": "ALYTH/BONNYBROOK",
+          "community": "FRANKLIN",
           "P": 3.25,
           "safety": true,
-          "lat": 51.02285696668069,
-          "lon": -114.02248247207032,
-          "reports": 1
-        }
-      ]
-    },
-    {
-      "crew": 2,
-      "zone": "NW",
-      "centroid": [
-        51.118207,
-        -114.275243
-      ],
-      "jobs": [
-        {
-          "id": "26-00651513",
-          "type": "Traffic sign",
-          "service_name": "Roads - Signs - Traffic and Roadmarking",
-          "community": "TUSCANY",
-          "P": 3.0,
-          "safety": false,
-          "lat": 51.12191108825487,
-          "lon": -114.2408862053562,
-          "reports": 2
-        },
-        {
-          "id": "26-00653866",
-          "type": "Pothole",
-          "service_name": "Roads - Pothole Maintenance",
-          "community": "KILLARNEY/GLENGARRY",
-          "P": 3.25,
-          "safety": true,
-          "lat": 51.030131956517685,
-          "lon": -114.13173134426395,
+          "lat": 51.05893200830186,
+          "lon": -113.98749539255644,
           "reports": 1
         },
         {
-          "id": "26-00653868",
+          "id": "26-00653144",
           "type": "Pothole",
           "service_name": "Roads - Pothole Maintenance",
-          "community": "GLENDALE",
+          "community": "HUXLEY",
           "P": 3.25,
           "safety": true,
-          "lat": 51.03337139240085,
-          "lon": -114.15271889005814,
+          "lat": 51.055551543633726,
+          "lon": -113.9045528436838,
           "reports": 1
         },
         {
-          "id": "26-00653914",
-          "type": "Commercial waste",
-          "service_name": "WRS - Commercial Collection Services",
-          "community": "BOWNESS",
-          "P": 1.75,
-          "safety": false,
-          "lat": 51.08334628834888,
-          "lon": -114.188388474722,
-          "reports": 2
-        },
-        {
-          "id": "26-00654178",
+          "id": "26-00652711",
           "type": "Damaged sign",
           "service_name": "Roads - Signs - Missing - Damaged",
-          "community": "HORIZON",
+          "community": "09P",
           "P": 3.25,
           "safety": true,
-          "lat": 51.08990020616713,
-          "lon": -113.99169523733028,
-          "reports": 1
-        }
-      ]
-    },
-    {
-      "crew": 3,
-      "zone": "W",
-      "centroid": [
-        51.041915,
-        -114.146808
-      ],
-      "jobs": [
-        {
-          "id": "26-00651958",
-          "type": "Debris",
-          "service_name": "Roads - Debris on Street/Sidewalk/Boulevard",
-          "community": "GLAMORGAN",
-          "P": 2.25,
-          "safety": false,
-          "lat": 51.015116804134095,
-          "lon": -114.15322733578051,
-          "reports": 1
-        },
-        {
-          "id": "26-00652030",
-          "type": "Parking sign",
-          "service_name": "Roads - Signs - Parking",
-          "community": "UNIVERSITY DISTRICT",
-          "P": 1.25,
-          "safety": false,
-          "lat": 51.07385411823228,
-          "lon": -114.14496478087015,
-          "reports": 1
-        },
-        {
-          "id": "26-00652152",
-          "type": "Pothole",
-          "service_name": "Roads - Pothole Maintenance",
-          "community": "SCARBORO/SUNALTA WEST",
-          "P": 3.25,
-          "safety": true,
-          "lat": 51.04219909319587,
-          "lon": -114.11485990934284,
-          "reports": 1
-        },
-        {
-          "id": "26-00652611",
-          "type": "Pothole",
-          "service_name": "Roads - Pothole Maintenance",
-          "community": "SHAGANAPPI",
-          "P": 3.25,
-          "safety": true,
-          "lat": 51.04521146641257,
-          "lon": -114.1266528552515,
-          "reports": 1
-        },
-        {
-          "id": "26-00652728",
-          "type": "Parking sign",
-          "service_name": "Roads - Signs - Parking",
-          "community": "SHAGANAPPI",
-          "P": 1.25,
-          "safety": false,
-          "lat": 51.04521146641257,
-          "lon": -114.1266528552515,
+          "lat": 51.02686663627315,
+          "lon": -113.8887647551224,
           "reports": 1
         }
       ]
     },
     {
       "crew": 4,
-      "zone": "SE",
-      "centroid": [
-        50.891711,
-        -113.940579
-      ],
-      "jobs": [
-        {
-          "id": "26-00649189",
-          "type": "Parking sign",
-          "service_name": "Roads - Signs - Parking",
-          "community": "MAHOGANY",
-          "P": 1.5,
-          "safety": false,
-          "lat": 50.89594391667445,
-          "lon": -113.92463385892704,
-          "reports": 1
-        },
-        {
-          "id": "26-00653848",
-          "type": "Residential waste",
-          "service_name": "WRS - Waste - Residential",
-          "community": "MAHOGANY",
-          "P": 2.25,
-          "safety": false,
-          "lat": 50.89594391667445,
-          "lon": -113.92463385892704,
-          "reports": 3
-        },
-        {
-          "id": "26-00653909",
-          "type": "Commercial waste",
-          "service_name": "WRS - Commercial Collection Services",
-          "community": "CRESCENT HEIGHTS",
-          "P": 1.25,
-          "safety": false,
-          "lat": 51.05950171589272,
-          "lon": -114.06164731813936,
-          "reports": 1
-        },
-        {
-          "id": "26-00654031",
-          "type": "Damaged sign",
-          "service_name": "Roads - Signs - Missing - Damaged",
-          "community": "DOWNTOWN COMMERCIAL CORE",
-          "P": 3.25,
-          "safety": true,
-          "lat": 51.0472744358498,
-          "lon": -114.06959371115344,
-          "reports": 1
-        },
-        {
-          "id": "26-00654086",
-          "type": "Damaged sign",
-          "service_name": "Roads - Signs - Missing - Damaged",
-          "community": "ELBOW PARK",
-          "P": 3.25,
-          "safety": true,
-          "lat": 51.02134304236776,
-          "lon": -114.08380531110666,
-          "reports": 1
-        }
-      ]
-    },
-    {
-      "crew": 5,
       "zone": "S",
       "centroid": [
-        50.913917,
-        -114.078054
+        50.888889,
+        -114.02262
       ],
+      "workers": 4,
+      "limit": 5,
       "jobs": [
+        {
+          "id": "26-00653375",
+          "type": "Debris",
+          "service_name": "Roads - Debris on Street/Sidewalk/Boulevard",
+          "community": "SILVERADO",
+          "P": 2.75,
+          "safety": false,
+          "lat": 50.88298604108047,
+          "lon": -114.07129694074862,
+          "reports": 2
+        },
         {
           "id": "26-00652104",
           "type": "New carts",
@@ -291,6 +245,84 @@
           "reports": 1
         },
         {
+          "id": "26-00649189",
+          "type": "Parking sign",
+          "service_name": "Roads - Signs - Parking",
+          "community": "MAHOGANY",
+          "P": 1.5,
+          "safety": false,
+          "lat": 50.89594391667445,
+          "lon": -113.92463385892704,
+          "reports": 1
+        },
+        {
+          "id": "26-00653848",
+          "type": "Residential waste",
+          "service_name": "WRS - Waste - Residential",
+          "community": "MAHOGANY",
+          "P": 2.25,
+          "safety": false,
+          "lat": 50.89594391667445,
+          "lon": -113.92463385892704,
+          "reports": 3
+        }
+      ]
+    },
+    {
+      "crew": 5,
+      "zone": "S",
+      "centroid": [
+        51.001914,
+        -114.052638
+      ],
+      "workers": 4,
+      "limit": 5,
+      "jobs": [
+        {
+          "id": "26-00652053",
+          "type": "Commercial waste",
+          "service_name": "WRS - Commercial Collection Services",
+          "community": "PARKHILL",
+          "P": 1.75,
+          "safety": false,
+          "lat": 51.01819490645702,
+          "lon": -114.06553191848668,
+          "reports": 2
+        },
+        {
+          "id": "26-00654086",
+          "type": "Damaged sign",
+          "service_name": "Roads - Signs - Missing - Damaged",
+          "community": "ELBOW PARK",
+          "P": 3.25,
+          "safety": true,
+          "lat": 51.02134304236776,
+          "lon": -114.08380531110666,
+          "reports": 1
+        },
+        {
+          "id": "26-00652377",
+          "type": "Residential waste",
+          "service_name": "WRS - Waste - Residential",
+          "community": "ERLTON",
+          "P": 1.25,
+          "safety": false,
+          "lat": 51.02633258165659,
+          "lon": -114.06314803616586,
+          "reports": 1
+        },
+        {
+          "id": "26-00652760",
+          "type": "Pothole",
+          "service_name": "Roads - Pothole Maintenance",
+          "community": "ALYTH/BONNYBROOK",
+          "P": 3.25,
+          "safety": true,
+          "lat": 51.02285696668069,
+          "lon": -114.02248247207032,
+          "reports": 1
+        },
+        {
           "id": "26-00652996",
           "type": "Pothole",
           "service_name": "Roads - Pothole Maintenance",
@@ -300,113 +332,106 @@
           "lat": 50.920841901943966,
           "lon": -114.02822405924384,
           "reports": 1
-        },
-        {
-          "id": "26-00653375",
-          "type": "Debris",
-          "service_name": "Roads - Debris on Street/Sidewalk/Boulevard",
-          "community": "SILVERADO",
-          "P": 2.75,
-          "safety": false,
-          "lat": 50.88298604108047,
-          "lon": -114.07129694074862,
-          "reports": 2
-        },
-        {
-          "id": "26-00653674",
-          "type": "Debris",
-          "service_name": "Roads - Debris on Street/Sidewalk/Boulevard",
-          "community": "DOWNTOWN COMMERCIAL CORE",
-          "P": 3.25,
-          "safety": false,
-          "lat": 51.0472744358498,
-          "lon": -114.06959371115344,
-          "reports": 3
         }
       ]
     },
     {
       "crew": 6,
-      "zone": "NE",
+      "zone": "W",
       "centroid": [
-        51.097651,
-        -113.937527
+        51.030708,
+        -114.13655
       ],
+      "workers": 4,
+      "limit": 5,
       "jobs": [
         {
-          "id": "26-00652711",
-          "type": "Damaged sign",
-          "service_name": "Roads - Signs - Missing - Damaged",
-          "community": "09P",
-          "P": 3.25,
-          "safety": true,
-          "lat": 51.02686663627315,
-          "lon": -113.8887647551224,
-          "reports": 1
-        },
-        {
-          "id": "26-00652792",
-          "type": "Parking sign",
-          "service_name": "Roads - Signs - Parking",
-          "community": "HORIZON",
-          "P": 1.25,
-          "safety": false,
-          "lat": 51.08990020616713,
-          "lon": -113.99169523733028,
-          "reports": 1
-        },
-        {
-          "id": "26-00653018",
-          "type": "Parking sign",
-          "service_name": "Roads - Signs - Parking",
-          "community": "SOUTH AIRWAYS",
-          "P": 1.25,
-          "safety": false,
-          "lat": 51.07422107050224,
-          "lon": -114.00519380543584,
-          "reports": 1
-        },
-        {
-          "id": "26-00653144",
+          "id": "26-00653866",
           "type": "Pothole",
           "service_name": "Roads - Pothole Maintenance",
-          "community": "HUXLEY",
+          "community": "KILLARNEY/GLENGARRY",
           "P": 3.25,
           "safety": true,
-          "lat": 51.055551543633726,
-          "lon": -113.9045528436838,
+          "lat": 51.030131956517685,
+          "lon": -114.13173134426395,
           "reports": 1
         },
         {
-          "id": "26-00653413",
-          "type": "Residential waste",
-          "service_name": "WRS - Waste - Residential",
-          "community": "SADDLE RIDGE",
-          "P": 1.25,
+          "id": "26-00653222",
+          "type": "Debris",
+          "service_name": "Roads - Debris on Street/Sidewalk/Boulevard",
+          "community": "RICHMOND",
+          "P": 2.25,
           "safety": false,
-          "lat": 51.13057324276626,
-          "lon": -113.94562252266888,
+          "lat": 51.02971029545911,
+          "lon": -114.11842028929551,
+          "reports": 1
+        },
+        {
+          "id": "26-00652611",
+          "type": "Pothole",
+          "service_name": "Roads - Pothole Maintenance",
+          "community": "SHAGANAPPI",
+          "P": 3.25,
+          "safety": true,
+          "lat": 51.04521146641257,
+          "lon": -114.1266528552515,
+          "reports": 1
+        },
+        {
+          "id": "26-00653868",
+          "type": "Pothole",
+          "service_name": "Roads - Pothole Maintenance",
+          "community": "GLENDALE",
+          "P": 3.25,
+          "safety": true,
+          "lat": 51.03337139240085,
+          "lon": -114.15271889005814,
+          "reports": 1
+        },
+        {
+          "id": "26-00651958",
+          "type": "Debris",
+          "service_name": "Roads - Debris on Street/Sidewalk/Boulevard",
+          "community": "GLAMORGAN",
+          "P": 2.25,
+          "safety": false,
+          "lat": 51.015116804134095,
+          "lon": -114.15322733578051,
           "reports": 1
         }
       ]
     },
     {
       "crew": 7,
-      "zone": "N",
+      "zone": "W",
       "centroid": [
-        51.151944,
-        -114.122683
+        51.052206,
+        -114.099612
       ],
+      "workers": 4,
+      "limit": 5,
       "jobs": [
         {
-          "id": "26-00652635",
-          "type": "Debris",
-          "service_name": "Roads - Debris on Street/Sidewalk/Boulevard",
-          "community": "CITADEL",
-          "P": 2.25,
+          "id": "26-00652728",
+          "type": "Parking sign",
+          "service_name": "Roads - Signs - Parking",
+          "community": "SHAGANAPPI",
+          "P": 1.25,
           "safety": false,
-          "lat": 51.14453732608978,
-          "lon": -114.18391232300922,
+          "lat": 51.04521146641257,
+          "lon": -114.1266528552515,
+          "reports": 1
+        },
+        {
+          "id": "26-00652152",
+          "type": "Pothole",
+          "service_name": "Roads - Pothole Maintenance",
+          "community": "SCARBORO/SUNALTA WEST",
+          "P": 3.25,
+          "safety": true,
+          "lat": 51.04219909319587,
+          "lon": -114.11485990934284,
           "reports": 1
         },
         {
@@ -421,60 +446,6 @@
           "reports": 2
         },
         {
-          "id": "26-00653222",
-          "type": "Debris",
-          "service_name": "Roads - Debris on Street/Sidewalk/Boulevard",
-          "community": "RICHMOND",
-          "P": 2.25,
-          "safety": false,
-          "lat": 51.02971029545911,
-          "lon": -114.11842028929551,
-          "reports": 1
-        },
-        {
-          "id": "26-00653568",
-          "type": "Debris",
-          "service_name": "Roads - Debris on Street/Sidewalk/Boulevard",
-          "community": "SANDSTONE VALLEY",
-          "P": 2.25,
-          "safety": false,
-          "lat": 51.137732845524965,
-          "lon": -114.094962509766,
-          "reports": 1
-        },
-        {
-          "id": "26-00653629",
-          "type": "Pothole",
-          "service_name": "Roads - Pothole Maintenance",
-          "community": "FRANKLIN",
-          "P": 3.25,
-          "safety": true,
-          "lat": 51.05893200830186,
-          "lon": -113.98749539255644,
-          "reports": 1
-        }
-      ]
-    },
-    {
-      "crew": 8,
-      "zone": "W",
-      "centroid": [
-        51.042998,
-        -114.080482
-      ],
-      "jobs": [
-        {
-          "id": "26-00651657",
-          "type": "Damaged sign",
-          "service_name": "Roads - Signs - Missing - Damaged",
-          "community": "BELTLINE",
-          "P": 3.5,
-          "safety": true,
-          "lat": 51.03743796399198,
-          "lon": -114.0551860888619,
-          "reports": 1
-        },
-        {
           "id": "26-00651966",
           "type": "Debris",
           "service_name": "Roads - Debris on Street/Sidewalk/Boulevard",
@@ -486,28 +457,6 @@
           "reports": 2
         },
         {
-          "id": "26-00652053",
-          "type": "Commercial waste",
-          "service_name": "WRS - Commercial Collection Services",
-          "community": "PARKHILL",
-          "P": 1.75,
-          "safety": false,
-          "lat": 51.01819490645702,
-          "lon": -114.06553191848668,
-          "reports": 2
-        },
-        {
-          "id": "26-00652377",
-          "type": "Residential waste",
-          "service_name": "WRS - Waste - Residential",
-          "community": "ERLTON",
-          "P": 1.25,
-          "safety": false,
-          "lat": 51.02633258165659,
-          "lon": -114.06314803616586,
-          "reports": 1
-        },
-        {
           "id": "26-00652380",
           "type": "New carts",
           "service_name": "WRS - New Service - Carts",
@@ -516,6 +465,73 @@
           "safety": false,
           "lat": 51.074237909055896,
           "lon": -114.07602998447167,
+          "reports": 1
+        }
+      ]
+    },
+    {
+      "crew": 8,
+      "zone": "NW",
+      "centroid": [
+        51.112276,
+        -114.170623
+      ],
+      "workers": 4,
+      "limit": 5,
+      "jobs": [
+        {
+          "id": "26-00652030",
+          "type": "Parking sign",
+          "service_name": "Roads - Signs - Parking",
+          "community": "UNIVERSITY DISTRICT",
+          "P": 1.25,
+          "safety": false,
+          "lat": 51.07385411823228,
+          "lon": -114.14496478087015,
+          "reports": 1
+        },
+        {
+          "id": "26-00653914",
+          "type": "Commercial waste",
+          "service_name": "WRS - Commercial Collection Services",
+          "community": "BOWNESS",
+          "P": 1.75,
+          "safety": false,
+          "lat": 51.08334628834888,
+          "lon": -114.188388474722,
+          "reports": 2
+        },
+        {
+          "id": "26-00651513",
+          "type": "Traffic sign",
+          "service_name": "Roads - Signs - Traffic and Roadmarking",
+          "community": "TUSCANY",
+          "P": 3.0,
+          "safety": false,
+          "lat": 51.12191108825487,
+          "lon": -114.2408862053562,
+          "reports": 2
+        },
+        {
+          "id": "26-00652635",
+          "type": "Debris",
+          "service_name": "Roads - Debris on Street/Sidewalk/Boulevard",
+          "community": "CITADEL",
+          "P": 2.25,
+          "safety": false,
+          "lat": 51.14453732608978,
+          "lon": -114.18391232300922,
+          "reports": 1
+        },
+        {
+          "id": "26-00653568",
+          "type": "Debris",
+          "service_name": "Roads - Debris on Street/Sidewalk/Boulevard",
+          "community": "SANDSTONE VALLEY",
+          "P": 2.25,
+          "safety": false,
+          "lat": 51.137732845524965,
+          "lon": -114.094962509766,
           "reports": 1
         }
       ]

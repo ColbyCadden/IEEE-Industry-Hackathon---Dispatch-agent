@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Calgary 311 Dispatch Agent — Architecture</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#020617; --panel:#0b1220; --line:#1e293b;
+  --cyan:#22d3ee; --emerald:#34d399; --violet:#a78bfa; --amber:#fbbf24;
+  --rose:#fb7185; --orange:#fb923c; --slate:#94a3b8; --fg:#e2e8f0; --muted:#94a3b8;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--fg);font-family:'JetBrains Mono',monospace;padding:28px 20px 40px}
+.wrap{max-width:1280px;margin:0 auto}
+h1{font-size:20px;font-weight:700;letter-spacing:.01em;display:flex;align-items:center;gap:10px}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--cyan);box-shadow:0 0 10px var(--cyan);animation:p 2s infinite}
+@keyframes p{0%,100%{opacity:1}50%{opacity:.35}}
+.sub{color:var(--muted);font-size:11px;margin-top:8px;line-height:1.7}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;margin-top:20px;overflow-x:auto}
+h2{font-size:12px;font-weight:600;color:var(--muted);letter-spacing:.12em;text-transform:uppercase;margin-bottom:14px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px;margin-top:18px}
+.c{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:13px 15px}
+.ch{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.cd{width:8px;height:8px;border-radius:2px}
+.ch h3{font-size:12px;font-weight:600}
+.c ul{list-style:none;font-size:11px;color:var(--muted);line-height:1.85}
+table{border-collapse:collapse;width:100%;font-size:11px;margin-top:8px}
+th,td{border:1px solid var(--line);padding:8px 10px;text-align:left}
+th{color:var(--muted);font-weight:600;text-transform:uppercase;font-size:9px;letter-spacing:.1em}
+td b{color:var(--emerald)}
+.tag{font-size:9px;padding:2px 7px;border-radius:4px;border:1px solid}
+.real{color:var(--emerald);border-color:rgba(52,211,153,.45);background:rgba(52,211,153,.12)}
+.mixed{color:var(--amber);border-color:rgba(251,191,36,.45);background:rgba(251,191,36,.12)}
+.fake{color:var(--rose);border-color:rgba(251,113,133,.45);background:rgba(251,113,133,.12)}
+footer{color:#475569;font-size:10px;margin-top:22px;text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1><span class="dot"></span>Calgary 311 Dispatch Agent — System Architecture</h1>
+  <p class="sub">
+    Autonomous dispatch for municipal road &amp; waste tickets. Live 311 data &rarr; priority
+    scoring &rarr; five optimised crew routes &rarr; SUMO simulation and a 3D city view.
+    <br>The loop on the right is the point: a caller reports an update, and the plan re-optimises live.
+  </p>
+
+  <div class="card">
+    <h2>Data flow &amp; decision loop</h2>
+<svg viewBox="0 0 1180 560" width="1180" height="560" style="min-width:1180px">
+  <defs>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+    </pattern>
+    <marker id="a" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#94a3b8"/>
+    </marker>
+    <marker id="ac" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#22d3ee"/>
+    </marker>
+    <marker id="ae" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#34d399"/>
+    </marker>
+    <marker id="ar" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#fb7185"/>
+    </marker>
+  </defs>
+  <rect width="1180" height="560" fill="url(#grid)"/>
+
+  <!-- arrows first so boxes sit on top -->
+  <g stroke-width="1.6" fill="none">
+    <path d="M150 200 L232 200" stroke="#94a3b8" marker-end="url(#a)"/>
+    <path d="M404 200 L470 200" stroke="#94a3b8" marker-end="url(#a)"/>
+    <path d="M642 200 L706 200" stroke="#94a3b8" marker-end="url(#a)"/>
+    <path d="M878 216 L878 300" stroke="#22d3ee" marker-end="url(#ac)"/>
+    <path d="M706 336 L470 336" stroke="#22d3ee" marker-end="url(#ac)"/>
+    <path d="M404 336 L262 336" stroke="#22d3ee" marker-end="url(#ac)"/>
+    <path d="M246 300 L246 262" stroke="#34d399" marker-end="url(#ae)"/>
+    <path d="M950 200 L1042 200" stroke="#34d399" marker-end="url(#ae)"/>
+    <!-- the feedback loop: viewer -> planner -->
+    <path d="M1000 358 C 1000 470, 520 470, 520 262" stroke="#fb7185" stroke-dasharray="7,5"
+          marker-end="url(#ar)"/>
+    <path d="M1170 306 L1140 306" stroke="#fb923c" stroke-dasharray="5,4" marker-end="url(#a)"/>
+  </g>
+
+  <!-- sources -->
+  <text x="30" y="150" fill="#64748b" font-size="9" letter-spacing="1.4">LIVE DATA SOURCES</text>
+  <g>
+    <rect x="24" y="164" width="126" height="72" rx="6" fill="#0f172a"/>
+    <rect x="24" y="164" width="126" height="72" rx="6" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+    <text x="38" y="190" fill="#e2e8f0" font-size="11" font-weight="600">311 ArcGIS</text>
+    <text x="38" y="206" fill="#94a3b8" font-size="9">11 categories</text>
+    <text x="38" y="220" fill="#34d399" font-size="8">LIVE &middot; 5 min</text>
+  </g>
+  <g>
+    <rect x="24" y="248" width="126" height="72" rx="6" fill="#0f172a"/>
+    <rect x="24" y="248" width="126" height="72" rx="6" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+    <text x="38" y="274" fill="#e2e8f0" font-size="11" font-weight="600">311 CSV</text>
+    <text x="38" y="290" fill="#94a3b8" font-size="9">sample export</text>
+    <text x="38" y="304" fill="#fbbf24" font-size="8">SNAPSHOT</text>
+  </g>
+  <g>
+    <rect x="24" y="332" width="126" height="72" rx="6" fill="#0f172a"/>
+    <rect x="24" y="248" width="126" height="72" rx="6" fill="rgba(0,0,0,0)" stroke="none"/>
+    <rect x="24" y="332" width="126" height="72" rx="6" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+    <text x="38" y="358" fill="#e2e8f0" font-size="11" font-weight="600">Traffic feeds</text>
+    <text x="38" y="374" fill="#94a3b8" font-size="9">times &middot; incidents</text>
+    <text x="38" y="388" fill="#34d399" font-size="8">LIVE + ANNUAL</text>
+  </g>
+
+  <!-- agents -->
+  <text x="232" y="150" fill="#64748b" font-size="9" letter-spacing="1.4">AGENT TEAM</text>
+  <g>
+    <rect x="232" y="164" width="172" height="72" rx="6" fill="#0f172a"/>
+    <rect x="232" y="164" width="172" height="72" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+    <text x="248" y="190" fill="#e2e8f0" font-size="12" font-weight="600">Scout</text>
+    <text x="248" y="206" fill="#94a3b8" font-size="9">fetch + filter to area</text>
+    <text x="248" y="220" fill="#34d399" font-size="8">265 PINS IN VIEW</text>
+  </g>
+  <g>
+    <rect x="470" y="164" width="172" height="72" rx="6" fill="#0f172a"/>
+    <rect x="470" y="164" width="172" height="72" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+    <text x="486" y="190" fill="#e2e8f0" font-size="12" font-weight="600">Priority</text>
+    <text x="486" y="206" fill="#94a3b8" font-size="9">score urgency 1&ndash;10</text>
+    <text x="486" y="220" fill="#fb7185" font-size="8">PLACEHOLDER</text>
+  </g>
+  <g>
+    <rect x="706" y="164" width="172" height="108" rx="6" fill="#0f172a"/>
+    <rect x="706" y="164" width="172" height="108" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+    <text x="722" y="190" fill="#e2e8f0" font-size="12" font-weight="600">Route planner</text>
+    <text x="722" y="206" fill="#94a3b8" font-size="9">Dijkstra + OR-Tools</text>
+    <text x="722" y="220" fill="#94a3b8" font-size="9">5 crews &times; 8 stops</text>
+    <text x="722" y="236" fill="#22d3ee" font-size="8">38.6 MIN DRIVE</text>
+    <text x="722" y="252" fill="#64748b" font-size="8">vs 73.8 naive</text>
+    <text x="722" y="264" fill="#64748b" font-size="7">7 s solve</text>
+  </g>
+
+  <!-- outputs -->
+  <text x="878" y="150" fill="#64748b" font-size="9" letter-spacing="1.4">SIMULATION</text>
+  <g>
+    <rect x="878" y="164" width="122" height="108" rx="6" fill="#0f172a"/>
+    <rect x="878" y="164" width="122" height="108" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+    <text x="894" y="190" fill="#e2e8f0" font-size="11" font-weight="600">SUMO</text>
+    <text x="894" y="206" fill="#94a3b8" font-size="9">557 edges</text>
+    <text x="894" y="220" fill="#94a3b8" font-size="9">171 signals</text>
+    <text x="894" y="238" fill="#fbbf24" font-size="8">SPEED + DEMAND</text>
+    <text x="894" y="254" fill="#fbbf24" font-size="8">FROM LIVE FEEDS</text>
+  </g>
+  <g>
+    <rect x="878" y="300" width="286" height="96" rx="6" fill="#0f172a"/>
+    <rect x="878" y="300" width="286" height="96" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+    <text x="894" y="326" fill="#e2e8f0" font-size="12" font-weight="600">3D city viewer (three.js)</text>
+    <text x="894" y="346" fill="#94a3b8" font-size="9">live traffic &middot; 311 pins by category</text>
+    <text x="894" y="362" fill="#94a3b8" font-size="9">5 crew routes &middot; numbered stops &middot; ETAs</text>
+    <text x="894" y="382" fill="#fb7185" font-size="8">CLICK A STOP &rarr; FIX IT ON THE SPOT</text>
+  </g>
+
+  <!-- decision layer -->
+  <text x="232" y="316" fill="#64748b" font-size="9" letter-spacing="1.4">LIVE DECISION LAYER</text>
+  <g>
+    <rect x="232" y="300" width="234" height="96" rx="6" fill="#0f172a"/>
+    <rect x="232" y="300" width="234" height="96" rx="6" fill="rgba(136,19,55,0.4)" stroke="#fb7185" stroke-width="1.5"/>
+    <text x="248" y="326" fill="#e2e8f0" font-size="12" font-weight="600">Dispatch voice agent</text>
+    <text x="248" y="346" fill="#94a3b8" font-size="9">ElevenLabs Conversational AI</text>
+    <text x="248" y="362" fill="#94a3b8" font-size="9">which issue? what happened?</text>
+    <text x="248" y="382" fill="#fb7185" font-size="8">RE-PLANS ALL 5 CREWS</text>
+  </g>
+  <g>
+    <rect x="262" y="164" width="0" height="0"/>
+    <rect x="1122" y="270" width="0" height="0"/>
+  </g>
+
+  <!-- caller -->
+  <g>
+    <rect x="1042" y="164" width="122" height="72" rx="6" fill="#0f172a"/>
+    <rect x="1042" y="164" width="122" height="72" rx="6" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+    <text x="1058" y="190" fill="#e2e8f0" font-size="11" font-weight="600">Caller</text>
+    <text x="1058" y="206" fill="#94a3b8" font-size="9">"it was fixed"</text>
+    <text x="1058" y="222" fill="#94a3b8" font-size="9">"still dangerous"</text>
+  </g>
+
+  <!-- contract box -->
+  <g>
+    <rect x="24" y="430" width="540" height="106" rx="6" fill="#0f172a"/>
+    <rect x="24" y="430" width="540" height="106" rx="6" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+    <text x="40" y="456" fill="#e2e8f0" font-size="11" font-weight="600">The contract between agents: files</text>
+    <text x="40" y="476" fill="#94a3b8" font-size="9">priority_list.csv &rarr; requests.csv &rarr; routes.json &rarr; live_updates.jsonl</text>
+    <text x="40" y="494" fill="#94a3b8" font-size="9">Each agent is testable alone; any decision is reproducible from its inputs.</text>
+    <text x="40" y="514" fill="#a78bfa" font-size="8">SWAP THE PRIORITY AGENT WITHOUT TOUCHING THE PLANNER</text>
+  </g>
+
+  <!-- legend -->
+  <g transform="translate(600,438)">
+    <rect x="0" y="0" width="564" height="98" rx="8" fill="rgba(15,23,42,0.85)" stroke="#1e293b"/>
+    <text x="16" y="22" fill="#64748b" font-size="9" letter-spacing="1.2">LEGEND</text>
+    <rect x="16" y="34" width="12" height="12" rx="3" fill="rgba(6,78,59,0.4)" stroke="#34d399"/>
+    <text x="36" y="44" fill="#94a3b8" font-size="9">agent</text>
+    <rect x="96" y="34" width="12" height="12" rx="3" fill="rgba(120,53,15,0.3)" stroke="#fbbf24"/>
+    <text x="116" y="44" fill="#94a3b8" font-size="9">simulation</text>
+    <rect x="204" y="34" width="12" height="12" rx="3" fill="rgba(8,51,68,0.4)" stroke="#22d3ee"/>
+    <text x="224" y="44" fill="#94a3b8" font-size="9">decision / output</text>
+    <rect x="352" y="34" width="12" height="12" rx="3" fill="rgba(136,19,55,0.4)" stroke="#fb7185"/>
+    <text x="372" y="44" fill="#94a3b8" font-size="9">voice agent</text>
+    <rect x="16" y="58" width="12" height="12" rx="3" fill="rgba(76,29,149,0.4)" stroke="#a78bfa"/>
+    <text x="36" y="68" fill="#94a3b8" font-size="9">file contract</text>
+    <rect x="132" y="58" width="12" height="12" rx="3" fill="rgba(30,41,59,0.5)" stroke="#94a3b8"/>
+    <text x="152" y="68" fill="#94a3b8" font-size="9">external data</text>
+    <path d="M256 64 L292 64" stroke="#fb7185" stroke-dasharray="6,4" stroke-width="1.6"/>
+    <text x="300" y="68" fill="#94a3b8" font-size="9">re-plan loop</text>
+    <text x="16" y="88" fill="#475569" font-size="8">All layers are display or decision logic; none of them alters simulated traffic.</text>
+  </g>
+</svg>
+  </div>
+
+  <div class="grid">
+    <div class="c">
+      <div class="ch"><span class="cd" style="background:#34d399"></span><h3>Real, live</h3></div>
+      <ul>
+        <li>&bull; 311 feed (city ArcGIS, 11 categories)</li>
+        <li>&bull; Travel times &amp; incidents</li>
+        <li>&bull; Routing + OR-Tools optimisation</li>
+        <li>&bull; ElevenLabs voice agent</li>
+        <li>&bull; 3D viewer, click-to-fix</li>
+      </ul>
+    </div>
+    <div class="c">
+      <div class="ch"><span class="cd" style="background:#fbbf24"></span><h3>Mixed freshness</h3></div>
+      <ul>
+        <li>&bull; Traffic counts: annual, 2002&ndash;2018</li>
+        <li>&bull; 311 CSV: historic snapshot</li>
+        <li>&bull; Travel time: free-flow from speed limits</li>
+        <li>&bull; Not live congestion</li>
+      </ul>
+    </div>
+    <div class="c">
+      <div class="ch"><span class="cd" style="background:#fb7185"></span><h3>Our assumptions</h3></div>
+      <ul>
+        <li>&bull; Urgency scores (priority agent is a stub)</li>
+        <li>&bull; Crew depot locations</li>
+        <li>&bull; On-site work time per job type</li>
+        <li>&bull; The cars in the sim are simulated</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Measured results &mdash; optimised vs naive baseline</h2>
+    <table>
+      <tr><th>Metric</th><th>Optimised</th><th>Naive baseline</th><th>Result</th></tr>
+      <tr><td>Total drive time, 40 stops / 5 crews</td><td><b>38.6 min</b></td><td>73.8 min</td><td><span class="tag real">1.9&times; less drive time</span></td></tr>
+      <tr><td>Priority-weighted arrival</td><td><b>18,410</b></td><td>22,178</td><td><span class="tag real">17% lower</span></td></tr>
+      <tr><td>Solve time for the whole plan</td><td><b>7 s</b></td><td>n/a</td><td><span class="tag real">fast enough to re-plan live</span></td></tr>
+      <tr><td>Stops assigned per crew</td><td><b>8</b></td><td>uneven</td><td><span class="tag real">balanced load</span></td></tr>
+    </table>
+    <p class="sub" style="margin-top:12px">
+      Baseline = priority order, nearest free crew: the obvious thing a dispatcher does by hand.
+      19 tickets were also resolved through the voice agent during a live session, and the plan
+      re-optimised on every one.
+    </p>
+  </div>
+</div>
+<footer>Calgary 311 Dispatch Agent &middot; IEEE YP Industry Hackathon 2026 &middot; open source stack, one laptop</footer>
+</body>
+</html>

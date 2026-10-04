@@ -142,6 +142,50 @@ function attachCall({ button }) {
   };
 }
 
+/* ---- Real ElevenLabs Conversational AI widget -------------------------
+ * Official embed (per ElevenLabs docs): a custom element + the
+ * @elevenlabs/convai-widget-embed module from unpkg. The agent is configured by
+ * agents/dispatch/elevenlabs_setup.py; its server tools update the map, the
+ * priority list and every crew's route.
+ * Requirement on the ElevenLabs side: the agent must be PUBLIC with
+ * authentication disabled (Advanced tab), otherwise the widget refuses to load.
+ * If this script is blocked, the scripted "Hoop on a call" path below still works. */
+function loadWidget() {
+  fetch('/api/config')
+    .then(r => r.json())
+    .then(c => {
+      window.__EL_AGENT_ID = c.elevenlabs_agent_id;
+      if (!c.elevenlabs_agent_id) return;
+      const s = document.createElement('script');
+      s.src = 'https://unpkg.com/@elevenlabs/convai-widget-embed';
+      s.async = true; s.type = 'text/javascript';
+      s.onload = () => mountWidget(c.elevenlabs_agent_id);
+      s.onerror = () => console.warn('[call] ElevenLabs widget module blocked - use the scripted call');
+      document.head.appendChild(s);
+    })
+    .catch(() => {});
+}
+
+function mountWidget(agentId) {
+  if (document.getElementById('dp-el') || !customElements.get('elevenlabs-convai')) return;
+  const el = document.createElement('elevenlabs-convai');
+  el.setAttribute('agent-id', agentId);
+  el.setAttribute('variant', 'compact');
+  el.setAttribute('dismissible', 'true');
+  el.setAttribute('action-text', 'Call dispatch');
+  el.setAttribute('start-call-text', 'Start the call');
+  el.setAttribute('end-call-text', 'End call');
+  el.setAttribute('listening-text', 'Listening...');
+  el.setAttribute('avatar-orb-color-1', '#2792dc');
+  el.setAttribute('avatar-orb-color-2', '#9ce6e6');
+  el.id = 'dp-el';
+  const host = document.getElementById('dp-body');
+  (host || document.body).appendChild(el);
+}
+
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', loadWidget);
+else loadWidget();
+
 /* dispatch.js builds the panel in a separate module (and needs three.js from the
  * CDN to load first), so wait for it - but never fail silently. */
 window.addEventListener('error', e => showFatal('JS error: ' + e.message));

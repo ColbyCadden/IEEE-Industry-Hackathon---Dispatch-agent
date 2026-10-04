@@ -49,7 +49,12 @@ async function speak(text) {
                                          body: JSON.stringify({text})});
     if (r.ok) {
       audio = new Audio(URL.createObjectURL(await r.blob()));
-      await new Promise(res => { audio.onended = res; audio.onerror = res; audio.play().catch(res); });
+      await new Promise(res => {
+        audio.onended = res; audio.onerror = res; audio.play().catch(res);
+        // never hang if the browser drops the end event: wait the clip's length plus a moment
+        let guard = setTimeout(res, 4000 + text.length * 90);
+        audio.onloadedmetadata = () => { if (isFinite(audio.duration)) { clearTimeout(guard); guard = setTimeout(res, audio.duration * 1000 + 2500); } };
+      });
       return;
     }
   } catch (e) { /* no voice service: use the browser's voice */ }

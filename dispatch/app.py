@@ -1,4 +1,4 @@
-"""Streamlit demo: `streamlit run dispatch/app.py` (run `python -m dispatch.run` first)."""
+"""Roads dispatch console: `streamlit run dispatch/app.py` (run `python -m dispatch.run` first)."""
 import json
 import sys
 from pathlib import Path
@@ -150,9 +150,8 @@ def safe_briefing(plan: dict, metrics: dict, when: str, changes: dict | None = N
         m = metrics["noon"]
         return (f"Noon plan: {m['n']} jobs, {m['safety']} safety tickets. {m.get('moved', 0)} jobs moved, "
                 f"{m.get('dropped', 0)} deferred, {m.get('safety_dropped', 0)} safety tickets deferred."), "numbers"
-    m, f = metrics["8am"], metrics["fifo"]
-    return (f"8 a.m. plan: {m['n']} jobs, {m['safety']} safety tickets "
-            f"(oldest-first would cover {f['safety']})."), "numbers"
+    m = metrics["8am"]
+    return f"8 a.m. plan: {m['n']} jobs, {m['safety']} safety tickets.", "numbers"
 
 
 def cached_briefing(key: str, *args, **kwargs) -> tuple[str, str]:
@@ -327,7 +326,7 @@ def crew_view_state(crew: dict) -> pdk.ViewState:
 
 
 def render_map(plan: dict, changes: dict | None = None, selected: dict | None = None,
-               crew: dict | None = None) -> None:
+               crew: dict | None = None, height: int = 500, key_prefix: str = "map") -> None:
     if selected:
         view_state = pdk.ViewState(latitude=selected["lat"], longitude=selected["lon"], zoom=14.5)
     elif crew and crew["jobs"]:
@@ -341,281 +340,94 @@ def render_map(plan: dict, changes: dict | None = None, selected: dict | None = 
         tooltip={"text": "{type} - {community}\nP {P} | crew {crew} ({zone}) {status}\nticket {id}"},
     )
     # a new key per selection remounts the map so it actually moves to the new view state
-    key = f"map_{selected['id'] if selected else ''}_{crew['crew'] if crew else ''}"
-    st.pydeck_chart(deck, key=key, alt="Map of Calgary showing today's jobs, coloured by crew")
+    key = f"{key_prefix}_{selected['id'] if selected else ''}_{crew['crew'] if crew else ''}"
+    st.pydeck_chart(deck, key=key, height=height, alt="Map of Calgary showing jobs, coloured by crew")
     st.caption("Colour = crew. Large dots = safety tickets. Black outline = moved at noon. Grey = deferred.")
 
 
-OURS_COLOR = "rgb(44,160,44)"  # crew-palette green; readable on light and dark themes
-BOX = "border:1px solid rgba(128,128,128,.35);border-radius:.6rem;padding:.7rem 1rem;height:100%"
+VIEW_LABELS = {"Agent": "8 a.m. plan", "Agent - noon": "After the crew update"}
+SENSITIVITY_NOTE = ("We re-ran the plan with every type weight changed by ±1 (16 variations). The agent covered "
+                    "more hazard tickets than oldest-first in all 16, by +9 to +15.")
 
 
-def _compare_html(title: str, ours: str, theirs: str, note: str, size: float) -> str:
-    """Two big numbers side by side: our agent (green) vs oldest-first (muted)."""
-    return (
-        f"<div style='{BOX}'>"
-        f"<div style='font-size:.95rem;font-weight:600;opacity:.8'>{title}</div>"
-        f"<div style='display:flex;align-items:baseline;gap:.7rem;flex-wrap:wrap;margin:.2rem 0'>"
-        f"<span style='font-size:{size}rem;font-weight:800;line-height:1.05;color:{OURS_COLOR}'>{ours}</span>"
-        f"<span style='font-size:{size * .4:.2f}rem;opacity:.6'>vs</span>"
-        f"<span style='font-size:{size}rem;font-weight:800;line-height:1.05;opacity:.45'>{theirs}</span></div>"
-        f"<div style='font-size:.8rem;opacity:.7'>{note}</div></div>"
-    )
+def render_facts(view: str, plan: dict, m: dict) -> None:
+    """The operational facts, compact: crews working, jobs today, hazard tickets, and what changed."""
+    working = sum(1 for c in plan["crews"] if c["jobs"])
+    with st.container(horizontal=True, vertical_alignment="center", gap="small"):
+        st.badge(f"{working} of {len(plan['crews'])} crews working", icon=":material/groups:", color="gray")
+        st.badge(f"{m['n']} jobs assigned today", icon=":material/assignment:", color="gray")
+        st.badge(f"{m['safety']} hazard tickets covered", icon=":material/warning:", color="gray",
+                 help="Hazard tickets: potholes and missing or damaged signs.")
+        if view == "Agent - noon":
+            ev = ss.noon["event"]
+            who = f"Crew {ev['crew']} " + ("out" if ev["event"] == "crew_out"
+                                          else f"at {float(ev.get('capacity', 0.0)):.0%}")
+            st.badge(f"{who} · {m.get('moved', 0)} moved · {m.get('dropped', 0)} deferred · "
+                     f"{m.get('safety_dropped', 0)} hazards deferred", icon=":material/sync:", color="orange")
 
 
-def _count_html(title: str, value: str | None, note: str) -> str:
-    """Small card; greyed 'awaiting crew update' when there is no value yet."""
-    if value is None:
-        return (f"<div style='{BOX};opacity:.45'><div style='font-size:.95rem;font-weight:600'>{title}</div>"
-                f"<div style='font-size:1rem;font-style:italic;margin-top:.5rem'>awaiting crew update</div></div>")
-    return (f"<div style='{BOX}'><div style='font-size:.95rem;font-weight:600;opacity:.8'>{title}</div>"
-            f"<div style='font-size:2.2rem;font-weight:700;line-height:1.1'>{value}</div>"
-            f"<div style='font-size:.8rem;opacity:.7'>{note}</div></div>")
-
-
-def render_metrics(view: str, m: dict, fifo: dict, base: dict, out_crew: int | None) -> None:
-    ours = base if view == "FIFO" else m  # the comparison always shows our plan vs oldest-first
-    who = f"our noon plan (crew {out_crew} out)" if view == "Agent - noon" else "our agent, 8 a.m."
-    c1, c2, c3, c4 = st.columns([2.2, 1.4, 1, 1])
-    c1.markdown(_compare_html("Safety hazards covered — our agent vs oldest-first",
-                              str(ours["safety"]), str(fifo["safety"]),
-                              f"{who} · oldest-first (FIFO), all crews", 4.2), unsafe_allow_html=True)
-    c2.markdown(_compare_html("Priority served (total P)", f"{ours['P']:.1f}", f"{fifo['P']:.1f}",
-                              "our agent vs oldest-first", 2.2), unsafe_allow_html=True)
-    if view == "Agent - noon":
-        c3.markdown(_count_html("Jobs moved", str(m.get("moved", 0)), "to a nearby crew"),
-                    unsafe_allow_html=True)
-        c4.markdown(_count_html("Jobs deferred", str(m.get("dropped", 0)),
-                                f"{m.get('safety_dropped', 0)} of them safety tickets"), unsafe_allow_html=True)
-    else:
-        c3.markdown(_count_html("Jobs moved", None, ""), unsafe_allow_html=True)
-        c4.markdown(_count_html("Jobs deferred", None, ""), unsafe_allow_html=True)
-    st.caption("**Priority score P** = hazard type (0–3) + 0.25 per day waiting + 0.5 per extra report. "
-               "Higher = more urgent.")
-    st.caption("**Robustness:** we re-ran the plan with every type weight changed by ±1 — 16 variations. "
-               "Our agent covered more safety tickets than oldest-first in all 16, by between +9 and +15.")
-
-
-def _stage_html(row: dict, tone: str) -> str:
-    """One card of the improvement panel: safety tickets covered, then jobs and total P."""
-    m = row["m"]
-    title = (f"<div style='font-size:.8rem;font-weight:700;letter-spacing:.06em'>{row['stage']}"
-             f"<span style='font-weight:400;opacity:.7'> · {row['what']}</span></div>")
-    if m is None:
-        return (f"<div style='{BOX};opacity:.45'>{title}"
-                f"<div style='font-size:1rem;font-style:italic;margin-top:.5rem'>run python -m dispatch.run</div></div>")
-    extra = (f"{m['moved']} moved · {m['deferred']} deferred · {m['safety_dropped']} safety dropped"
-             if "moved" in m else "&nbsp;")
-    return (f"<div style='{BOX}'>{title}"
-            f"<div style='display:flex;align-items:baseline;gap:.5rem;margin:.15rem 0'>"
-            f"<span style='font-size:2.6rem;font-weight:800;line-height:1.05;{tone}'>{m['safety']}</span>"
-            f"<span style='font-size:.85rem;opacity:.7'>safety tickets covered</span></div>"
-            f"<div style='font-size:.8rem;opacity:.8'>{m['jobs']} jobs · total P {m['P']:.2f}</div>"
-            f"<div style='font-size:.8rem;opacity:.8'>{extra}</div></div>")
-
-
-def render_improvement(metrics: dict) -> None:
-    """Baseline, first result and improved result side by side, always on screen (no clicking)."""
-    if improvement is None:
-        return
-    try:
-        event = json.loads((OUT / "event.json").read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        event = None
-    try:
-        rows = improvement.comparison_rows(metrics, event)
-        summary = improvement.summary_line(rows, event)
-    except Exception:  # unexpected metrics shape: hide the panel rather than break the page
-        return
-    st.markdown("**Improvement round:** baseline → first result → improved result "
-                "(safety tickets covered, 8 crews × 5 jobs)")
-    tones = {"fifo": "opacity:.45", "8am": f"color:{OURS_COLOR}", "noon": f"color:{OURS_COLOR}"}
-    for col, row in zip(st.columns(3), rows):
-        col.markdown(_stage_html(row, tones[row["key"]]), unsafe_allow_html=True)
-    st.caption(summary)
-
-
-def render_crews(plan: dict, changes: dict | None, out_crew: int | None) -> None:
-    moved = {m["id"] for m in (changes or {}).get("moved", [])}
-    cols = st.columns(4)
-    for i, c in enumerate(plan["crews"]):
-        with cols[i % 4].container(border=True):
-            r, g, b = CREW_COLORS[(c["crew"] - 1) % len(CREW_COLORS)]
-            is_sel = c["crew"] == st.session_state.selected_crew
-            with st.container(horizontal=True, vertical_alignment="center", gap="small"):
-                st.markdown(f"<span style='color:rgb({r},{g},{b});font-size:1.3em'>●</span>",
-                            unsafe_allow_html=True, width="content")
-                st.button(f"**Crew {c['crew']}** · {c['zone']}", key=f"crew_{c['crew']}",
-                          type="secondary" if is_sel else "tertiary", on_click=toggle_crew, args=(c["crew"],),
-                          icon=":material/filter_center_focus:" if is_sel else None,
-                          help="Selected: click again to show the whole city" if is_sel
-                          else "Focus the map on this crew")
-            if not c["jobs"]:
-                st.caption("Out today" if c["crew"] == out_crew else "No jobs")
-                continue
-            safety = sum(j["safety"] for j in c["jobs"])
-            st.caption(f"{len(c['jobs'])} jobs · {safety} safety · P {sum(j['P'] for j in c['jobs']):.1f}")
-            for j in sorted(c["jobs"], key=lambda j: -j["P"]):
-                tags = _job_label(j, moved)
-                chosen = j["id"] == st.session_state.selected_job
-                st.button(f"{j['type']} · {j['community'].title()} · P {j['P']:.2f}{tags}",
-                          key=f"job_{j['id']}", type="secondary" if chosen else "tertiary",
-                          icon=":material/my_location:" if chosen else None,
-                          on_click=select_job, args=(None if chosen else j["id"],),
-                          help="Selected: click again to clear" if chosen else "Show details and find on map")
-
-
-# --- page ------------------------------------------------------------------
-
-st.set_page_config(page_title="311 Dispatch Agent", layout="wide")
-data = load_outputs()
-metrics = data["metrics"]
-ss = st.session_state
-ss.setdefault("update_text", "")
-ss.setdefault("parsed", None)
-ss.setdefault("parse_error", None)
-ss.setdefault("received", "")
-ss.setdefault("noon", None)
-ss.setdefault("applied", None)
-ss.setdefault("selected_job", None)
-ss.setdefault("selected_crew", None)
-
-st.title("Who should 311 send next?")
-st.caption("Calgary Roads · 8 crews × 5 jobs · priority agent vs oldest-first (FIFO) · "
-           "frozen sample of 200 Open Calgary 311 tickets (Aug 25–27, 2026), planned for Aug 28, 2026")
-if data["fake"]:
-    st.warning("Showing sample data: run `python -m dispatch.run` to generate dispatch/outputs/.")
-
-render_improvement(metrics)
-
-views = ["Agent", "FIFO"] + (["Agent - noon"] if ss.noon and "plan" in ss.noon else [])
-if ss.get("view") not in views:
-    ss.view = views[-1] if ss.noon and "plan" in ss.noon else "Agent"
-view = st.radio("Plan shown", views, horizontal=True, key="view",
-                captions=["8 a.m. priority plan", "oldest-first baseline", "after the crew update"][:len(views)])
-
-if view == "FIFO":
-    plan, m, changes, out_crew = data["plan_fifo"], metrics["fifo"], None, None
-elif view == "Agent":
-    plan, m, changes, out_crew = data["plan_8am"], metrics["8am"], None, None
-else:
-    plan, m, changes = ss.noon["plan"], ss.noon["metrics"]["noon"], ss.noon["changes"]
-    out_crew = ss.noon["event"].get("crew")
-
-render_metrics(view, m, metrics["fifo"], metrics["8am"], out_crew)
-
-sel_job, sel_job_crew = find_job(plan, changes, ss.selected_job)
-sel_crew = find_crew(plan, ss.selected_crew)
-
-left, right = st.columns([3, 2])
-with left:
-    render_map(plan, changes, sel_job, sel_crew)
-with right:
-    if ss.selected_job:
-        st.subheader("Selected job")
-        render_job_detail(sel_job, sel_job_crew, view)
-        if sel_crew:
-            st.caption(f"Clear the job to go back to crew {sel_crew['crew']}'s list.")
-    elif sel_crew:
-        st.subheader("Selected crew")
-        render_crew_panel(sel_crew, changes, out_crew)
-    else:
-        st.subheader("Briefing")
-        with st.container(border=True):
-            if view == "FIFO":
-                st.write(f"Baseline: oldest tickets first, same crews and zones. It covers {m['safety']} safety "
-                         f"tickets, versus {metrics['8am']['safety']} in the agent's plan.")
-            else:
-                if view == "Agent":
-                    text, src = cached_briefing("8am", data["plan_8am"], metrics, "8am")
-                else:
-                    ev = ss.noon["event"]
-                    text, src = cached_briefing(f"noon:{ev['event']}:{ev['crew']}:{ev.get('capacity')}",
-                                                plan, ss.noon["metrics"], "noon", changes, event=ev)
-                st.write(text)
-                st.caption(SOURCE_NOTES[src])
-        st.caption(":material/touch_app: Click a crew name or a job below to focus the map on it.")
-
-    st.subheader("Report a crew update")
-
-    def _apply(event: dict, received: str) -> None:
-        """Replan straight away: the supervisor's only step is submitting the update."""
-        clean = {k: v for k, v in event.items() if k not in ("source", "why", "candidates")}  # engine gets the contract dict
-        if clean["event"] == "crew_partial" and float(clean.get("capacity", 0.0)) >= 1.0:
-            ss.noon = None  # the crew is back: nothing to replan
+def render_assistant_turns(view: str, plan: dict, changes: dict | None) -> None:
+    """The conversation: the agent's briefing, the supervisor's last update, and what the agent did with it."""
+    bot, me = ":material/smart_toy:", ":material/person:"
+    with st.chat_message("assistant", avatar=bot):
+        # operational briefing only: the oldest-first figures stay on the Analysis tab
+        if view == "Agent":
+            text, src = cached_briefing("ops:8am", data["plan_8am"], {"8am": metrics["8am"]}, "8am")
         else:
-            ss.noon = {**replan(data["plan_8am"], metrics, clean), "event": clean}
-        ss.applied = {"event": event, "received": received}
-        ss.parsed = ss.parse_error = None
-        ss.pop("view", None)
-
-    def _run(text: str, only_crew: int | None = None) -> None:
-        """Read the update and apply it. Only an ambiguous message stops to ask one question."""
-        ss.received = text.strip()
-        ss.applied = None
-        event, err = safe_parse(ss.received, only_crew)
-        if event and event["event"] != "unclear":
-            _apply(event, ss.received)
-        else:
-            ss.parsed, ss.parse_error = event, err
-
-    def _submit() -> None:
-        if ss.update_text.strip():
-            _run(ss.update_text)
-
-    def _answer() -> None:
-        """Re-read the original message together with the supervisor's answer to the question."""
-        answer = ss.followup.strip()
-        if not answer:
-            return
-        if answer.isdigit() or answer.lower() in NUMBER_WORDS:
-            answer = f"crew {answer}"  # a bare "4" answers "Which crew?"
-        ss.followup = ""
-        _run(f"{ss.received}. {answer}")
-
-    def _manual(crew: int, kind: str) -> None:
-        out = kind == "crew_out"
-        _apply({"event": kind, "crew": crew, "capacity": 0.0 if out else 0.5, "question": None,
-                "source": "manual"}, ss.get("received", ""))
-
-    with st.form("crew_update", clear_on_submit=True, border=False):
-        st.text_area("Crew update", key="update_text", height=90, label_visibility="collapsed",
-                     placeholder="Type a crew update and press Submit, e.g. hey it's crew 4, two guys called in sick")
-        st.form_submit_button("Submit update", type="primary", icon=":material/send:", on_click=_submit)
-    with st.expander("Try an example", expanded=False):
-        for text in QUICK_FILLS:
-            st.button(text, type="tertiary", on_click=_run, args=(text,), key=f"example_{text}")
+            ev = ss.noon["event"]
+            ops = {k: v for k, v in ss.noon["metrics"].items() if k != "fifo"}
+            text, src = cached_briefing(f"ops:noon:{ev['event']}:{ev['crew']}:{ev.get('capacity')}",
+                                        plan, ops, "noon", changes, event=ev)
+        st.markdown(text)
+        st.caption(SOURCE_NOTES[src])
 
     if ss.get("applied"):
         ev, got = ss.applied["event"], ss.applied["received"]
+        if got:
+            with st.chat_message("user", avatar=me):
+                st.markdown(got)
         how = {"claude": ":material/auto_awesome: Read by Claude", "manual": ":material/edit: Entered by hand"}.get(
             ev.get("source"), ":material/rule: Read by the rule-based parser"
             + (" (Claude unavailable: no API key or no connection)" if str(ev.get("why", "")).startswith("fallback")
                else " (no Claude call needed)"))
-        with st.container(border=True):
-            st.markdown(f":material/check_circle: **Replanned.** {describe(ev)}")
-            if got:
-                st.caption(f"\u201c{got}\u201d")
+        with st.chat_message("assistant", avatar=bot):
+            back = ev["event"] == "crew_partial" and float(ev.get("capacity", 0.0)) >= 1.0
+            st.markdown(":material/check_circle: **Understood. Plan updated.**" if not back
+                        else ":material/check_circle: **Understood. No replan needed.**")
+            label, color, icon = EVENT_BADGES.get(ev["event"], ("Update", "gray", ":material/info:"))
+            if back:
+                label, color, icon = "Crew at full strength", "green", ":material/group:"
+            f_ev, f_crew, f_cap = st.columns([1.8, 1, 1])
+            with f_ev:
+                st.caption("Event")
+                st.badge(label, icon=icon, color=color)
+            f_crew.caption("Crew")
+            f_crew.markdown(f"**{ev.get('crew')}**")
+            f_cap.caption("Capacity")
+            f_cap.markdown(f"**{float(ev.get('capacity', 0.0)):.0%}**")
+            st.caption(describe(ev))
             st.caption(how)
-            st.caption("Every replan starts from the 8 a.m. plan; one crew update applies at a time.")
             with st.expander("Parsed result (JSON)", expanded=False):
                 st.json({k: v for k, v in ev.items() if k not in ("source", "why")})
 
     if ss.get("parse_error") and not ss.parsed:
-        with st.container(border=True):
-            st.error("Couldn't read that update automatically. Pick the crew and what happened:")
+        with st.chat_message("assistant", avatar=bot):
+            st.markdown("I couldn't read that update automatically. Which crew, and what happened?")
             st.caption(ss.parse_error)
             m_crew, m_kind = st.columns(2)
             crew = m_crew.selectbox("Crew", range(1, 9), index=3)
             kind = m_kind.radio("Status", ["Out for the day", "Short-handed (50%)"])
-            st.button("Use this update", on_click=_manual, args=(crew, "crew_out" if kind.startswith("Out") else "crew_partial"))
+            st.button("Use this update", on_click=_manual,
+                      args=(crew, "crew_out" if kind.startswith("Out") else "crew_partial"))
 
     if ss.parsed:  # only reached for an ambiguous message
         event = ss.parsed
-        with st.container(border=True):
-            st.markdown("**:material/help: One detail needed**")
-            st.code(ss.get("received", ""), language=None, wrap_lines=True)
-            st.info(f"**{event.get('question') or 'Which crew is affected?'}**", icon=":material/help:")
+        if ss.get("received"):
+            with st.chat_message("user", avatar=me):
+                st.markdown(ss.received)
+        with st.chat_message("assistant", avatar=bot):
+            st.markdown(f"**{event.get('question') or 'Which crew is affected?'}**")
+            st.caption("Read by Claude" if event.get("source") == "claude" else "Read by the rule-based parser")
             picks = event.get("candidates") or []
             if picks:  # several crews named: one click picks the one to replan
                 for col, n in zip(st.columns(len(picks)), picks):
@@ -630,17 +442,242 @@ with right:
                 st.text_input("Your answer", key="followup", placeholder="e.g. crew 4", on_change=_answer)
                 st.button("Send answer", icon=":material/reply:", on_click=_answer)
 
-    if ss.noon and "error" in ss.noon:
-        st.error(f"Replan engine isn't available: {ss.noon['error']}")
-    elif ss.noon:
-        if st.button("Reset to 8 a.m. plan"):
-            ss.noon = None
-            ss.applied = None
-            ss.pop("view", None)
-            st.rerun()
 
-st.subheader("Crews")
-st.caption("⚠️ = safety ticket (potholes and missing or damaged signs). ↪ moved = reassigned at noon.")
-st.caption("Each crew works its own area of the city, so a crew's mix of jobs reflects what was reported "
-           "there today. That's why some crews carry more safety tickets than others.")
-render_crews(plan, changes, out_crew)
+def render_crew_list(plan: dict, changes: dict | None, out_crew: int | None) -> None:
+    """Dense crew list beside the map: crew row (click to isolate) and its jobs (click for detail)."""
+    moved = {m["id"] for m in (changes or {}).get("moved", [])}
+    for c in plan["crews"]:
+        r, g, b = CREW_COLORS[(c["crew"] - 1) % len(CREW_COLORS)]
+        is_sel = c["crew"] == st.session_state.selected_crew
+        jobs = sorted(c["jobs"], key=lambda j: -j["P"])
+        with st.container(horizontal=True, vertical_alignment="center", gap="small"):
+            st.markdown(f"<span style='color:rgb({r},{g},{b});font-size:1.2em'>●</span>",
+                        unsafe_allow_html=True, width="content")
+            st.button(f"**Crew {c['crew']}** · {c['zone']}", key=f"crew_{c['crew']}",
+                      type="secondary" if is_sel else "tertiary", on_click=toggle_crew, args=(c["crew"],),
+                      icon=":material/filter_center_focus:" if is_sel else None,
+                      help="Selected: click again to show the whole city" if is_sel else "Isolate this crew on the map")
+            if jobs:
+                st.caption(f"{len(jobs)} jobs · {sum(j['safety'] for j in jobs)} hazard")
+            else:
+                st.caption("Out today" if c["crew"] == out_crew else "No jobs")
+        for j in jobs:
+            chosen = j["id"] == st.session_state.selected_job
+            st.button(f"{j['type']} · {j['community'].title()} · P {j['P']:.2f}{_job_label(j, moved)}",
+                      key=f"job_{j['id']}", type="secondary" if chosen else "tertiary",
+                      icon=":material/my_location:" if chosen else None,
+                      on_click=select_job, args=(None if chosen else j["id"],),
+                      help="Selected: click again to clear" if chosen else "Show details and find on map")
+        st.divider()
+
+
+def comparison_table(bundle: dict, event: dict | None):
+    """Rows for the evidence table: baseline, agent plan, replanned plan (same code as dispatch.improvement)."""
+    import pandas as pd
+    if improvement is not None:
+        rows = improvement.comparison_rows(bundle, event)
+    else:  # improvement.py missing: same three rows straight from the metrics
+        crew = (event or {}).get("crew", "?")
+        rows = [{"key": k, "stage": s, "what": w, "m": None if bundle.get(k) is None else
+                 {"jobs": bundle[k]["n"], "safety": bundle[k]["safety"], "P": bundle[k]["P"],
+                  **({"moved": bundle[k].get("moved", 0), "deferred": bundle[k].get("dropped", 0),
+                      "safety_dropped": bundle[k].get("safety_dropped", 0)} if k == "noon" else {})}}
+                for k, s, w in (("fifo", "1 BASELINE", "oldest-first (FIFO)"),
+                                ("8am", "2 FIRST RESULT", "priority-scored agent"),
+                                ("noon", "3 IMPROVED", f"replanned, crew {crew} out"))]
+    names = {"fifo": "1 · Oldest-first baseline", "8am": "2 · Agent plan, 8 a.m.", "noon": "3 · Agent replanned"}
+    table = []
+    for r in rows:
+        m = r["m"] or {}
+        table.append({  # all text, so "—" and numbers share a column cleanly
+            "Plan": names[r["key"]] + (f" ({r['what'].split(', ', 1)[-1]})" if r["key"] == "noon" else ""),
+            "Jobs": str(m.get("jobs", "n/a")),
+            "Hazard tickets covered": str(m.get("safety", "n/a")),
+            "Total priority (P)": f"{m['P']:.2f}" if "P" in m else "n/a",
+            "Moved": str(m.get("moved", "—")),
+            "Deferred": str(m.get("deferred", "—")),
+            "Hazards deferred": str(m.get("safety_dropped", "—")),
+        })
+    summary = improvement.summary_line(rows, event) if improvement is not None else ""
+    return pd.DataFrame(table), summary
+
+
+def render_analysis(metrics: dict) -> None:
+    """Evidence the plan is better: improvement round, disruption counts, scoring, robustness, FIFO view."""
+    if ss.noon and "plan" in ss.noon:  # the replan made in this session
+        bundle, event, note = ss.noon["metrics"], ss.noon["event"], "Row 3 is the crew update you applied."
+    else:  # the reference disruption from `python -m dispatch.run`
+        try:
+            event = json.loads((OUT / "event.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            event = None
+        bundle, note = metrics, "Row 3 is the reference disruption from `python -m dispatch.run`."
+
+    st.markdown("##### Improvement round: baseline → agent plan → replanned")
+    st.caption("Same 8 crews × 5 jobs, same zones, same assignment code. Only the order tickets are taken in differs.")
+    try:
+        df, summary = comparison_table(bundle, event)
+        st.table(df, hide_index=True)
+        st.caption(note + (f" {summary}" if summary else ""))
+    except Exception:  # unexpected metrics shape: say so rather than break the page
+        st.caption("Comparison unavailable: run `python -m dispatch.run`.")
+
+    f_col, s_col = st.columns(2, gap="medium")
+    with f_col:
+        st.markdown("##### Priority score")
+        st.markdown("P = hazard type weight (0–3) + 0.25 × days open + 0.5 × extra reports of the same problem. "
+                    "Higher means more urgent. Weight 3: potholes, missing or damaged signs. 2: debris, traffic "
+                    "markings. 1: service requests. 0: not a field-crew job.")
+    with s_col:
+        st.markdown("##### Robustness")
+        st.markdown(SENSITIVITY_NOTE)
+        st.caption("Reproduce: `python -m tests.sensitivity`")
+
+    st.markdown("##### Oldest-first plan, for comparison")
+    fifo, fm = data["plan_fifo"], metrics["fifo"]
+    st.caption(f"Tickets taken by age, type ignored: {fm['n']} jobs, {fm['safety']} hazard tickets, "
+               f"total P {fm['P']:.2f}. Not a dispatch plan.")
+    import pandas as pd
+    map_col, table_col = st.columns([3, 2], gap="medium")
+    with map_col:
+        render_map(fifo, height=420, key_prefix="fifo_map")
+    with table_col:
+        rows = [{"Crew": f"{c['crew']} · {c['zone']}", "Job": j["type"], "Community": j["community"].title(),
+                 "P": round(j["P"], 2), "Hazard": "⚠️" if j["safety"] else ""}
+                for c in fifo["crews"] for j in sorted(c["jobs"], key=lambda j: -j["P"])]
+        st.dataframe(pd.DataFrame(rows), hide_index=True, height=420)
+    st.caption("Data: frozen sample of 200 Open Calgary 311 tickets. No street addresses (coordinates only); "
+               "jobs are assigned to crews, not routed.")
+
+
+# --- page ------------------------------------------------------------------
+
+st.set_page_config(page_title="Roads Dispatch · Calgary 311", page_icon=":material/engineering:", layout="wide")
+data = load_outputs()
+metrics = data["metrics"]
+ss = st.session_state
+ss.setdefault("update_text", "")
+ss.setdefault("parsed", None)
+ss.setdefault("parse_error", None)
+ss.setdefault("received", "")
+ss.setdefault("noon", None)
+ss.setdefault("applied", None)
+ss.setdefault("selected_job", None)
+ss.setdefault("selected_crew", None)
+
+
+def _apply(event: dict, received: str) -> None:
+    """Replan straight away: the supervisor's only step is submitting the update."""
+    clean = {k: v for k, v in event.items() if k not in ("source", "why", "candidates")}  # engine gets the contract dict
+    if clean["event"] == "crew_partial" and float(clean.get("capacity", 0.0)) >= 1.0:
+        ss.noon = None  # the crew is back: nothing to replan
+    else:
+        ss.noon = {**replan(data["plan_8am"], metrics, clean), "event": clean}
+    ss.applied = {"event": event, "received": received}
+    ss.parsed = ss.parse_error = None
+    ss.pop("view", None)
+
+
+def _run(text: str, only_crew: int | None = None) -> None:
+    """Read the update and apply it. Only an ambiguous message stops to ask one question."""
+    ss.received = text.strip()
+    ss.applied = None
+    event, err = safe_parse(ss.received, only_crew)
+    if event and event["event"] != "unclear":
+        _apply(event, ss.received)
+    else:
+        ss.parsed, ss.parse_error = event, err
+
+
+def _submit() -> None:
+    if ss.update_text.strip():
+        _run(ss.update_text)
+
+
+def _answer() -> None:
+    """Re-read the original message together with the supervisor's answer to the question."""
+    answer = ss.followup.strip()
+    if not answer:
+        return
+    if answer.isdigit() or answer.lower() in NUMBER_WORDS:
+        answer = f"crew {answer}"  # a bare "4" answers "Which crew?"
+    ss.followup = ""
+    _run(f"{ss.received}. {answer}")
+
+
+def _manual(crew: int, kind: str) -> None:
+    out = kind == "crew_out"
+    _apply({"event": kind, "crew": crew, "capacity": 0.0 if out else 0.5, "question": None,
+            "source": "manual"}, ss.get("received", ""))
+
+
+def _reset() -> None:
+    ss.noon = None
+    ss.applied = None
+    ss.pop("view", None)
+
+
+replanned = bool(ss.noon and "plan" in ss.noon)
+views = ["Agent - noon", "Agent"] if replanned else ["Agent"]  # the live plan first
+if ss.get("view") not in views:
+    ss.view = views[0]
+
+st.markdown("#### :material/engineering: Roads Dispatch · Calgary 311")
+st.caption("Plan for Friday, Aug 28, 2026 · 8 crews × 5 jobs · frozen sample of 200 Open Calgary 311 tickets "
+           "(Aug 25–27, 2026)")
+if data["fake"]:
+    st.warning("Showing sample data: run `python -m dispatch.run` to generate dispatch/outputs/.")
+
+tab_dispatch, tab_analysis = st.tabs([":material/local_shipping: Dispatch", ":material/insights: Analysis"])
+
+with tab_dispatch:
+    with st.container(horizontal=True, vertical_alignment="center"):
+        view = st.segmented_control("Plan shown", views, key="view", required=True,
+                                    format_func=lambda v: VIEW_LABELS[v], label_visibility="collapsed")
+        if view == "Agent":
+            plan, m, changes, out_crew = data["plan_8am"], metrics["8am"], None, None
+        else:
+            plan, m, changes = ss.noon["plan"], ss.noon["metrics"]["noon"], ss.noon["changes"]
+            out_crew = ss.noon["event"].get("crew")
+        render_facts(view, plan, m)
+
+    sel_job, sel_job_crew = find_job(plan, changes, ss.selected_job)
+    sel_crew = find_crew(plan, ss.selected_crew)
+
+    left, right = st.columns([5, 3], gap="medium")
+    with left:
+        render_map(plan, changes, sel_job, sel_crew, height=620)
+        if ss.selected_job:
+            render_job_detail(sel_job, sel_job_crew, VIEW_LABELS[view])
+            if sel_crew:
+                st.caption(f"Clear the job to go back to crew {sel_crew['crew']}'s list.")
+        elif sel_crew:
+            render_crew_panel(sel_crew, changes, out_crew)
+
+    with right:
+        st.markdown("**:material/forum: Dispatch assistant**")
+        with st.container(border=True):
+            render_assistant_turns(view, plan, changes)
+            with st.form("crew_update", clear_on_submit=True, border=False):
+                st.text_area("Crew update", key="update_text", height=80, label_visibility="collapsed",
+                             placeholder="Report a crew update, e.g. hey it's crew 4, two guys called in sick")
+                with st.container(horizontal=True, vertical_alignment="center"):
+                    st.form_submit_button("Send", type="primary", icon=":material/send:", on_click=_submit)
+                    st.caption("Replans from the 8 a.m. plan; one crew at a time.")
+            with st.container(horizontal=True, vertical_alignment="center"):
+                with st.popover("Examples", icon=":material/lightbulb:"):
+                    for text in QUICK_FILLS:
+                        st.button(text, type="tertiary", on_click=_run, args=(text,), key=f"example_{text}")
+                if replanned:
+                    st.button("Reset to 8 a.m. plan", icon=":material/restart_alt:", type="tertiary",
+                              on_click=_reset)
+            if ss.noon and "error" in ss.noon:
+                st.error(f"Replan engine isn't available: {ss.noon['error']}")
+
+        st.markdown("**:material/groups: Crews**")
+        st.caption("⚠️ hazard ticket · ↪ moved at noon · each crew works its own area")
+        with st.container(height=420, border=True):
+            render_crew_list(plan, changes, out_crew)
+
+with tab_analysis:
+    render_analysis(metrics)

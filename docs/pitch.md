@@ -1,4 +1,4 @@
-# Pitch: Who should 311 send next?
+# Pitch: City Link — who should 311 send next?
 
 5-minute pitch + 3-minute Q&A. Times are targets; the demo is the part to protect.
 
@@ -24,8 +24,8 @@ weight or engine code changes, and update this page.
   open tickets 8 crews work today, and re-decides when the plan breaks.
 - **Today's default is oldest-first (FIFO).** It is fair to the queue but blind to risk: a
   missing stop sign waits behind a parking-sign complaint because the complaint is older.
-- **In our sample:** 122 open tickets, 104 distinct problems once duplicates are merged, 40
-  crew slots (8 crews × 5 jobs). FIFO puts only **16 of 30** open safety problems
+- **In our sample:** 122 open tickets, 104 distinct problems once duplicates are merged, and
+  8 crews with 32 workers. FIFO fills 40 crew slots but puts only **16 of 30** open safety problems
   (potholes, missing/damaged signs) on today's plan.
 - **Then the plan breaks.** A crew calls in sick at noon; the supervisor re-plans by hand.
 
@@ -58,11 +58,11 @@ meant for *ice and snow*. But "ice" is inside **Serv*ice*s** and **Lic*ence***:
 flowchart LR
   A[311 CSV] --> B[Clean<br/>drop Closed,<br/>merge duplicates]
   B --> C[Score<br/>P = weight + age + reports]
-  C --> D[Zone crews<br/>KMeans on lat/lon]
-  D --> E[Assign<br/>8 crews × 5 jobs]
+  C --> D[Compact crews<br/>tight groups, least driving]
+  D --> E[Size crews<br/>32 workers by workload]
   E --> F[8 a.m. plan<br/>+ briefing]
   G[Sick call<br/>free text] --> H[LLM parse<br/>→ structured event]
-  H --> I[Replan<br/>bump lowest-P job,<br/>3 nearest crews]
+  H --> I[Replan<br/>bump lowest-P job,<br/>4 nearest crews]
   F --> I
   I --> J[Noon plan<br/>+ briefing]
 ```
@@ -70,45 +70,58 @@ flowchart LR
 - **Score:** $P = w + 0.25 \cdot \text{days open} + 0.5 \cdot (\text{reports} - 1)$.
   Weight $w$ is 0–3 by type (3 = safety hazard, 0 = not a field-crew job). Age and repeat
   reports break ties so nothing waits forever.
-- **Zone:** KMeans splits the city into 8 crew zones (E, NW, W, SE, S, NE, N, central-W).
-- **Assign:** walk tickets by priority; each goes to the nearest crew with room. FIFO uses the
-  **same** zones and the **same** fill function — only the order differs, so the comparison
-  is fair.
+- **Choose the work:** the top 40 tickets by priority (FIFO takes the 40 oldest). Everything
+  after that is the **same** code for both plans, so the comparison is fair.
+- **Compact crews:** the jobs are split into 8 tight groups that minimise driving, and a clean-up
+  pass swaps jobs between crews until no swap shortens anyone's drive (2.8 km per job, was 4.2).
+- **Flexible crews:** the same 32 workers are split by workload (3 to 6 per crew); a crew's job
+  limit follows its size plus jobs within 1 km of each other, up to 7. The agent covers **48
+  jobs** with the same people. FIFO keeps standard crews (4 people, 5 jobs).
 - **Disruption:** the supervisor types the sick call in plain English; the LLM turns it into
   `{"event": "crew_out", "crew": 4}`; if it can't tell, it asks a question instead of guessing.
-- **Replan:** each of the sick crew's jobs, highest P first, tries its 3 nearest crews and
+- **Replan:** each of the sick crew's jobs, highest P first, tries its 4 nearest crews and
   bumps that crew's lowest-P job only if it is strictly lower. Everything that changed is
   logged as moved or dropped.
 
 ## 4. Live demo script (1:30)
 
 Before going on stage:
-- Run `python -m streamlit run dispatch/app.py` and open http://localhost:8501 at 125% zoom.
-- Check the caption under the briefing:
-  - "Written by Claude" means the key and network work.
-  - "rule-based template briefing" means you're running offline. That's fine, but say so if asked.
+- In a terminal: `cd` into the repo, then `python -m streamlit run dispatch/app.py`. Open
+  http://localhost:8501 (the City Link dashboard; localhost:8765 is the 3D sim on its own) at 125% zoom.
+- **Open the page once before you present.** The first load after starting Streamlit waits for
+  Claude to write the 8 a.m. briefing (5–10 s); after that it's instant for everyone.
+- Check the badge next to **Report an update**: green **Claude** means the key works; grey
+  **Rule-based** means you're offline. That's fine, but say so if asked.
 - On venue wifi with no internet, set `USE_LLM = False` in `dispatch/llm.py`. Otherwise each
   Claude attempt waits for a timeout before falling back.
+- 3D downtown (optional): on the **Analysis** tab, click **Start the 3D sim** about 15 s before
+  you need it (SUMO must be installed with `simulation\setup.bat`).
+- Use a normal browser window (not an emulated size), so map clicks land on the dots.
 
-1. **The headline card shows "30 vs 16".** Say: "Same 8 crews, same zones. Our agent covers all
-   30 safety hazards; oldest-first covers 16."
-2. **Under "Plan shown", click "FIFO".** The map and crew cards switch to the oldest-first plan.
-   Say: "14 potholes and broken signs are left for another day." Click "Agent" to go back.
-3. **Click "Crew 1 · E"** in the crew grid. The map isolates that crew's jobs, and the side panel
-   lists them with exact coordinates. Click a job to show its priority breakdown, then
-   "Clear job" and "Clear crew".
-4. **Read the first two lines of the 8 a.m. briefing aloud.**
-5. **Type in the crew update box:** `hey it's crew 4, two guys called in sick, we're done today`,
-   then click **Submit update**. The "Agent's interpretation" panel shows the text it received and
-   what it understood: crew out, crew 4, 0% capacity.
-6. **Click "Confirm and replan".**
-   - The view switches to "Agent - noon".
-   - Moved shows **2**, to crew 5 in the S zone, 11–12 km away.
-   - Deferred shows **5**, "0 of them safety tickets".
-   - Crew 4's card reads "Out today".
-7. **Read the noon briefing.**
-8. *(If time allows)* type `someone called in sick` and submit. The agent asks "Which crew is
-   affected?" instead of guessing. Answer `4`.
+1. **Dispatch tab, top cards:** "8 of 8 crews working", "48 jobs on the plan", "30 safety
+   tickets". Say: "Same 32 workers as oldest-first. Our plan covers all 30 safety hazards and 48
+   jobs; oldest-first covers 16 safety hazards in 40 jobs."
+2. **Click "Crew 7 · W · 6 people"** in the crew list. The map zooms to that crew's tight cluster,
+   and its jobs appear under the map with a priority out of 10 and red **Hazard** labels. Say: "Busy
+   areas get bigger crews: this one has 6 people and 7 jobs." Click a job (or a dot on the map) to
+   show its priority breakdown, then **Show all crews**.
+3. **Read the first two lines of the Latest briefing** under the map (the 8 a.m. briefing).
+4. **Type in the Report an update box:** `hey, crew 4 here, we're all out sick today, can't make it`,
+   then click **Submit update**. There's no confirm step; the agent replans at once:
+   - The result box reads "**Replanned.** Crew 4 is **out for the day**…" and "Read by **Claude**".
+   - The plan switch shows **Current plan (1 update)**; the crew list shows "Crew 4 · S · 4 people · out today".
+   - **Deferred today** shows **6**, "**0 safety** · 6 moved to other crews".
+5. **Read the new Latest briefing** (Update 1). Say: "The supervisor gets a plain-English update
+   after every change."
+6. *(If time allows)* type `someone called in sick` and submit. The agent asks "Which crew…?"
+   instead of guessing. Type `4` in the answer box. *(Or a second update:*
+   `crew 2 is down two guys today, we're short-handed` *→ crew 2 at 50%.)*
+7. **Briefings tab:** the 8 a.m. briefing and one card per update. Click **Close out the day** to
+   show the end-of-day overview.
+8. **Analysis tab:** "30 vs 16" safety hazards against oldest-first, the improvement round
+   (baseline → our plan → crew 4 out), and "Where crew time goes" (62% vs 40% of slots on safety
+   work; 17.6 vs 12.4 priority served per crew; 4 vs 14 slots on low-priority work). Point at the system diagram if asked how it works.
+   Use **Undo last update** or **Reset to 8 a.m. plan** on the Dispatch tab to start the demo again.
 
 **CLI fallback** (if the app fails): run `python -m dispatch.run`, which prints the numbers and
 both briefings. Then run `python -m tests.test_core` (11 PASS) and `python -m tests.sensitivity`
@@ -116,18 +129,19 @@ both briefings. Then run `python -m tests.test_core` (11 PASS) and `python -m te
 
 ## 5. Results vs FIFO (0:30)
 
-| Same 8 crews × 5 jobs | FIFO | Agent 8 a.m. | Agent noon (crew 4 out) |
+| Same 8 crews, 32 workers | FIFO | Agent 8 a.m. | Agent noon (crew 4 out) |
 |---|---|---|---|
 | Safety problems covered (of 30) | 16 | **30** | **30** |
-| Total priority P | 99.0 | **125.75** | 112.75 |
-| Jobs | 40 | 40 | 35 |
-| Moved / dropped | — | — | 2 / 5 (0 safety dropped) |
+| Total priority P | 99.0 | **140.75** | 130.0 |
+| Jobs | 40 | **48** | 42 |
+| Moved / dropped | — | — | 6 / 6 (0 safety dropped) |
 
-What fills the 40 slots:
+What each plan sends crews to:
 
-- **FIFO:** 9 potholes, 7 damaged signs, 8 debris, 6 parking signs, 3 commercial waste,
+- **FIFO (40 jobs):** 9 potholes, 7 damaged signs, 8 debris, 6 parking signs, 3 commercial waste,
   3 residential waste, 2 traffic signs, 2 new carts.
-- **Agent:** 16 potholes, 14 damaged signs, 7 debris, 3 traffic signs.
+- **Agent (48 jobs):** 16 potholes, 14 damaged signs, 10 debris, 4 traffic signs, 2 parking signs,
+  2 residential waste.
 
 **The reasoning loop (baseline → first result → improved result):**
 
@@ -135,11 +149,13 @@ What fills the 40 slots:
 2. **First result:** the agent covers 30 of 30. The first replan sent crew 4's jobs to whichever
    crew had the lowest-priority job anywhere — one job went **34.9 km** across the city for a
    tiny priority gain.
-3. **Improved result:** we capped bumping to the **3 nearest crews**. Moved jobs now travel
-   11–12 km, total P drops by only 0.75 (113.5 → 112.75), and still **no safety job is dropped**.
+3. **Improved result:** bumping is limited to the **4 nearest crews**, and crews are compact
+   groups sized by workload. With crew 4 out, the replan moves 6 jobs to neighbouring crews,
+   defers 6 lower-priority ones, keeps 130.0 of the 8 a.m. plan's 140.75 priority, and still
+   **drops no safety job**. Losing any one of the 8 crews drops no safety job either.
 
 **Robust to our weight choices:** we moved every type's weight by ±1 (16 variations). The agent
-beats FIFO on safety in **all 16**, by +9 to +15 (baseline +14).
+beats FIFO on safety in **all 16**, by +12 to +15 (baseline +14).
 
 ## 6. Commercialization (0:40)
 
@@ -178,7 +194,7 @@ at all (licence inspections, seniors inquiries). Every weight has a one-line rea
 
 **2. Doesn't the result just depend on the weights you picked?**
 We tested that. Moving any single weight up or down by one still has the agent ahead of FIFO
-on safety in all 16 cases, by +9 to +15 tickets.
+on safety in all 16 cases, by +12 to +15 tickets.
 
 **3. Is it really autonomous, or just a sort?**
 It plans the day, zones the crews, reads a free-text disruption, decides what moves and what
@@ -192,14 +208,15 @@ change. The event is shown to the supervisor before the replan is applied, and t
 itself is deterministic code, not the LLM.
 
 **5. Why not use an optimizer (MIP / OR-Tools)?**
-At this size a greedy fill is fast, explainable line by line, and already covers every safety
-ticket. An optimizer is a drop-in upgrade for the assignment step when we add job durations
-and routing.
+We already use one where it pays off: the crew grouping is an optimal (Hungarian) assignment,
+followed by a clean-up pass that swaps jobs until no swap shortens driving. Choosing *which*
+tickets to do stays a transparent priority ranking, which already covers every safety ticket.
+A full optimizer (MIP / OR-Tools) is the next step once we add job durations and routing.
 
 **6. How does it scale?**
-Scoring and assignment are linear in the number of tickets. KMeans zoning is fast for
-thousands of points, and crews and jobs per crew are parameters. A city-wide run is seconds,
-not minutes.
+Scoring is linear in the number of tickets, and the whole plan for today's sample builds in
+about 3 seconds. Crews, workers and job limits are parameters. A city-wide run stays in seconds;
+the exact route-ordering step would switch to a fast heuristic for crews with many more jobs.
 
 **7. Won't low-priority tickets wait forever?**
 No, because age is in the score: each day open adds 0.25, so a weight-1 ticket catches up

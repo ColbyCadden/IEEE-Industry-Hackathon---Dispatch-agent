@@ -11,7 +11,7 @@ Before submitting:
 
 ## Title
 
-**Who Should 311 Send Next? — a dispatch agent for Calgary Roads**
+**City Link — who should 311 send next? A dispatch agent for Calgary Roads**
 
 ## Tagline (3 lines)
 
@@ -39,7 +39,7 @@ not one damaged sign. We wanted a dispatcher that a Roads supervisor could actua
 
 ### How we built it
 
-A deterministic Python pipeline (pandas, scikit-learn) does the planning. Claude (Anthropic API)
+A deterministic Python pipeline (pandas, NumPy, SciPy) does the planning. Claude (Anthropic API)
 handles language: it reads the supervisor's free-text crew update and writes the briefings. A
 Streamlit dashboard ties them together. Without an API key or network, a rule-based parser and
 template briefings take over, and the dashboard labels which one answered.
@@ -58,24 +58,31 @@ template briefings take over, and the dashboard labels which one answered.
    - 2 is a road hazard (debris, traffic markings).
    - 1 is a service request.
    - 0 is not a field-crew job.
-3. **Zone.** KMeans on latitude and longitude splits the city into 8 crew zones.
-4. **Assign.** We walk tickets in priority order and give each one to the nearest crew with
-   room, up to 8 crews × 5 jobs. The FIFO baseline uses the *same* zones and the *same* fill
-   function, so the only difference is the order.
+3. **Choose the work.** The top 40 tickets in priority order make the day's core plan. The FIFO
+   baseline takes the 40 oldest instead; everything after this step is the same code.
+4. **Assign compact crews.** The 40 jobs are split into 8 tight groups that minimise driving
+   (capacitated k-means with an optimal Hungarian assignment), then a clean-up pass swaps jobs
+   between crews until no swap shortens anyone's drive. For the agent, the same 32 workers are
+   split by workload (3 to 6 per crew), and a crew's job limit follows its size plus its short
+   hops (jobs within 1 km of each other), up to 7 jobs. Spare room takes the next tickets nearby,
+   so the agent covers 48 jobs with the same people. FIFO keeps standard crews (4 people, 5 jobs).
 5. **Disrupt and replan.** A free-text sick call ("Crew 4 is out today") is parsed by an LLM into
    a structured event. If the message is unclear, it asks a question instead of guessing. Each
    of the lost crew's jobs, highest priority first, can bump the lowest-priority job of one of
-   its 3 nearest crews. Every change is logged as moved or dropped.
-6. **Brief.** The LLM writes a plain-English 8 a.m. briefing and a noon briefing for the
-   supervisor from the computed metrics.
+   its 4 nearest crews. Every change is logged as moved or dropped.
+6. **Brief.** The LLM writes a plain-English 8 a.m. briefing, a short briefing after every
+   update, and an end-of-day overview for the supervisor, all from the computed metrics.
 
-**Results on the sample (8 crews × 5 jobs):**
+**Results on the sample (8 crews, 32 workers):**
 
 | | FIFO | Agent 8 a.m. | Agent noon (crew 4 out) |
 |---|---|---|---|
 | Safety problems covered (of 30) | 16 | **30** | **30** |
-| Total priority $\sum P$ | 99.0 | **125.75** | 112.75 |
-| Jobs moved / dropped | — | — | 2 / 5, **0 safety dropped** |
+| Total priority $\sum P$ | 99.0 | **140.75** | 130.0 |
+| Jobs on the plan | 40 | **48** | 42 |
+| Jobs moved / dropped | — | — | 6 / 6, **0 safety dropped** |
+
+Driving: compact crews cut straight-line driving from 4.2 km to 2.8 km per job.
 
 ### Challenges we ran into
 
@@ -85,11 +92,12 @@ template briefings take over, and the dashboard labels which one answered.
 - **Duplicates inflate the backlog.** The same pothole reported twice is one job, not two. We
   merge duplicates and let repeat reports raise priority instead.
 - **Keeping the comparison fair.** It's easy to make FIFO look bad by giving it a worse setup.
-  Both plans share the same crews, zones and assignment code, and a test checks this.
+  Both plans share the same crews, the same 32 workers and the same assignment code, and a
+  test checks this.
 - **Our first replan sent crews across the city.** With no distance limit, one of the sick
-  crew's jobs went **34.9 km** to the far side of Calgary for a tiny priority gain. Limiting
-  moves to the 3 nearest crews keeps moves to 11–12 km and costs only 0.75 total priority,
-  with still no safety job dropped.
+  crew's jobs went **34.9 km** to the far side of Calgary for a tiny priority gain. Moves are
+  now limited to the 4 nearest crews, and the crew-4 replan still drops no safety job. Crew 4
+  works the far south, so its jobs travel 9–24 km to the neighbouring crews that take them.
 - **Hand-picked weights invite the question "did you tune this to win?"** We answered it
   with a sensitivity test (below).
 
@@ -98,7 +106,7 @@ template briefings take over, and the dashboard labels which one answered.
 - **A transparent rule beats a clever one.** A 10-line weight table with reasons is easier to
   defend, test and hand to a Roads supervisor than keyword logic.
 - **Test the result's robustness, not just the code.** We moved every type's weight by ±1
-  (16 variations), and the agent beat FIFO on safety in all 16, by +9 to +15 tickets.
+  (16 variations), and the agent beat FIFO on safety in all 16, by +12 to +15 tickets.
 - **Keep the LLM on language and the planning in code.** The LLM turns messy human messages
   into structured events and writes the briefings. The decisions stay deterministic and
   auditable.
@@ -117,7 +125,7 @@ template briefings take over, and the dashboard labels which one answered.
 
 ## Built with
 
-Python · pandas · scikit-learn · Anthropic Claude API · Streamlit · Calgary 311 open data
+Python · pandas · NumPy · SciPy · Anthropic Claude API · Streamlit · Calgary 311 open data
 
 **TODO:** add the repo link and team member names.
 
@@ -127,14 +135,14 @@ Python · pandas · scikit-learn · Anthropic Claude API · Streamlit · Calgary
 
 Take these at the same browser zoom, in light mode, and crop to the app.
 
-1. **8 a.m. plan map:** 8 coloured crew zones with 40 jobs, safety jobs highlighted.
+1. **8 a.m. plan map:** 8 coloured crews with 48 jobs, safety jobs highlighted.
 2. **FIFO vs agent comparison:** side by side or toggled, showing 16 vs 30 safety problems.
 3. **Starter bug evidence:** the `"ice" in name` line next to the 28/40 slot breakdown, or a
    terminal run showing it.
 4. **Sick-call input and parsed event:** "Crew 4 called in sick…" → `crew_out`, crew 4.
 5. **Unclear message:** a vague sick call where the agent asks a clarifying question.
-6. **Noon plan:** crew 4 empty, with moved jobs (crew 4 → 5) and dropped jobs listed.
+6. **Noon plan:** crew 4 empty, with its jobs moved to neighbouring crews and the deferred jobs listed.
 7. **8 a.m. and noon briefings:** the LLM-written supervisor text.
 8. **Sensitivity table:** terminal output of `python -m tests.sensitivity`.
-9. **Tests passing:** terminal output of `python -m tests.test_core` (7 PASS).
+9. **Tests passing:** terminal output of `python -m tests.test_core` (11 PASS).
 10. **Architecture diagram:** the mermaid flowchart from `docs/pitch.md`, rendered.

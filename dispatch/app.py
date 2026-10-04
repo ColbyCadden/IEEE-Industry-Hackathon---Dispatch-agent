@@ -1,11 +1,14 @@
 """Streamlit demo: `streamlit run dispatch/app.py` (run `python -m dispatch.run` first)."""
 import hashlib
+import html
 import json
+import re
 import sys
 from pathlib import Path
 
 import pydeck as pdk
 import streamlit as st
+import streamlit.components.v1 as components
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))  # `streamlit run` only puts dispatch/ on the path
@@ -19,6 +22,11 @@ try:  # the baseline / result / improved comparison is shared with `python -m di
     from dispatch import improvement  # noqa: E402
 except Exception:
     improvement = None
+
+try:  # caller voice call: intake agent, local voice API, optional ElevenLabs voice
+    from dispatch import intake, voice, voice_server  # noqa: E402
+except Exception:
+    intake = voice = voice_server = None
 
 try:  # new urgent jobs and the day's running log of updates
     from dispatch import live as day_live  # noqa: E402
@@ -211,6 +219,17 @@ SOURCE_NOTES = {
     "numbers": ":material/info: Briefing service unavailable, showing the numbers only.",
 }
 
+# The case asks what the supervisor hears at 8 a.m. and at noon: one slot each, in time order.
+BRIEF_SLOTS = {  # key -> (time, title, icon, accent colour)
+    "8am": ("8:00 a.m.", "Morning plan", "", "rgb(31,119,180)"),
+    "noon": ("12:00 noon", "Midday replan", "", "rgb(255,127,14)"),
+}
+CHIP_TONES = {
+    "good": "background:rgba(44,160,44,.16);color:rgb(44,160,44)",
+    "bad": "background:rgba(214,39,40,.14);color:rgb(214,39,40)",
+    "neutral": "background:rgba(128,128,128,.16)",
+}
+
 
 def read_by(ev: dict) -> str:
     """Which reader turned the supervisor's message into this update."""
@@ -219,6 +238,8 @@ def read_by(ev: dict) -> str:
         return ":material/auto_awesome: Read by **Claude**"
     if src == "manual":
         return ":material/edit: Entered by hand"
+    if src == "caller":
+        return ":material/call: From a caller report (Caller report tab)"
     if why.startswith("fallback"):
         return ":material/rule: Read by the **rule-based parser** (Claude unavailable: no API key or no connection)"
     return ":material/rule: Read by the **rule-based parser** (simple message, no Claude call needed)"
@@ -553,6 +574,246 @@ def render_live_strip(m: dict, fifo: dict, n_updates: int) -> None:
                  "which oldest-first never saw.")
     st.caption(note)
 
+def _sentences(text: str) -> list[str]:
+    """Split a briefing into sentences without breaking on 'a.m.' / 'p.m.'."""
+    guarded = re.sub(r"\b([ap])\.m\.", r"\1<dot>m<dot>", text.strip())
+    parts = [p.replace("<dot>", ".") for p in re.split(r"(?<=[.!?])\s+(?=[A-Z0-9])", guarded) if p.strip()]
+    if len(parts) > 1 and len(parts[0].split()) <= 3:  # "Good morning." opens the next point, not its own
+        parts[:2] = [f"{parts[0]} {parts[1]}"]
+    return parts
+
+
+def _brief_card_html(slot: str, text: str | None, chips: list[tuple[str, str]], active: bool) -> str:
+    """One timeline card: time + title, highlight chips, then the briefing as a numbered list.
+
+    text=None renders the waiting state (no crew update yet). Briefing text is escaped: it may come
+    from Claude.
+    """
+    when, title, icon, accent = BRIEF_SLOTS[slot]
+    border = f"2px solid {accent}" if active else "1px solid rgba(128,128,128,.35)"
+    tag = (f"<span style='margin-left:auto;font-size:.72rem;font-weight:600;padding:.1rem .5rem;"
+           f"border-radius:1rem;background:{accent};color:white'>on the map</span>" if active else "")
+    icon_html = f"<span style='font-size:1.25rem'>{icon}</span>" if icon else ""
+    head = (f"<div style='display:flex;align-items:center;gap:.5rem;flex-wrap:wrap'>{icon_html}"
+            f"<span style='font-weight:800;color:{accent}'>{when}</span>"
+            f"<span style='font-weight:600;opacity:.85'>· {title}</span>{tag}</div>")
+    if text is None:
+        return (f"<div style='border:1px dashed rgba(128,128,128,.5);border-left:5px solid {accent};"
+                f"border-radius:.6rem;padding:.7rem 1rem;margin-bottom:.4rem;opacity:.6'>{head}"
+                f"<div style='font-style:italic;margin-top:.45rem'>Waiting for a crew update. Report one below "
+                f"and the noon briefing appears here.</div></div>")
+    pills = "".join(f"<span style='display:inline-block;margin:.45rem .35rem 0 0;padding:.15rem .6rem;"
+                    f"border-radius:1rem;font-size:.82rem;font-weight:700;{CHIP_TONES[tone]}'>{html.escape(label)}"
+                    f"</span>" for label, tone in chips)
+    items = "".join(f"<li style='margin:.2rem 0'>{html.escape(s)}</li>" for s in _sentences(text))
+    return (f"<div style='border:{border};border-left:5px solid {accent};border-radius:.6rem;"
+            f"padding:.7rem 1rem;margin-bottom:.4rem'>{head}<div>{pills}</div>"
+            f"<ol style='margin:.55rem 0 0 1.1rem;padding:0;line-height:1.45'>{items}</ol></div>")
+
+
+def _event_label(event: dict) -> str:
+    if event.get("event") == "new_job":
+        return f"New job: {event['job'].get('label', 'urgent job')}"
+    if event.get("event") == "crew_partial":
+        return f"Crew {event.get('crew')} short-handed ({float(event.get('capacity', 0.5)):.0%})"
+    return f"Crew {event.get('crew')} out"
+
+
+def render_briefings(view: str, data: dict, metrics: dict) -> None:
+    """Both supervisor briefings in time order: 8 a.m. plan, then the noon replan (or its waiting state)."""
+    st.markdown("**Supervisor briefings**")
+    st.caption("What the Roads supervisor hears at 8 a.m. and at noon, written from the plan's numbers.")
+    if view == "FIFO":
+        st.caption(f":material/info: The map shows the oldest-first baseline: {metrics['fifo']['safety']} safety "
+                   f"tickets versus {metrics['8am']['safety']} in the agent's plan. Both briefings below are "
+                   f"for the agent's plan.")
+
+    text, src = cached_briefing("8am", data["plan_8am"], metrics, "8am")
+    m, fifo = metrics["8am"], metrics["fifo"]
+    chips = [(f"{m['safety']} safety tickets", "good"),
+             (f"{m['safety'] - fifo['safety']:+d} vs oldest-first", "good" if m["safety"] >= fifo["safety"] else "bad"),
+             (f"{m['n']} jobs", "neutral")]
+    st.markdown(_brief_card_html("8am", text, chips, active=view == "Agent"), unsafe_allow_html=True)
+    st.caption(SOURCE_NOTES[src])
+
+    noon = st.session_state.noon
+    log = st.session_state.get("log") or []
+    if noon and "plan" in noon:
+        ev, nm = noon["event"], noon["metrics"]["noon"]
+        digest = hashlib.md5(json.dumps(log, sort_keys=True, default=str).encode()).hexdigest()
+        text, src = cached_briefing(f"noon:{digest}", noon["plan"], noon["metrics"], "noon", noon["changes"], event=ev)
+        lost = nm.get("safety_dropped", 0)
+        chips = [(_event_label(ev) if len(log) == 1 else f"{len(log)} updates today", "bad"),
+                 (f"{nm.get('moved', 0)} moved", "neutral"), (f"{nm.get('dropped', 0)} deferred", "neutral")]
+        if nm.get("added"):
+            chips.append((f"{nm['added']} new job{'s' if nm['added'] != 1 else ''}", "neutral"))
+        chips.append((f"{lost} safety dropped", "good" if lost == 0 else "bad"))
+        st.markdown(_brief_card_html("noon", text, chips, active=view == "Agent - noon"), unsafe_allow_html=True)
+        st.caption(SOURCE_NOTES[src])
+    else:
+        st.markdown(_brief_card_html("noon", None, [], active=False), unsafe_allow_html=True)
+
+
+
+VOICE_WIDGET = ROOT / "dispatch" / "voice_call.html"
+
+
+@st.cache_resource
+def voice_api_port() -> int | None:
+    """Start the local voice API once per dashboard process (see dispatch/voice_server.py)."""
+    try:
+        return voice_server.start()
+    except Exception:
+        return None
+
+
+def _new_call(greet: bool = True) -> None:
+    """Start a call in the shared store. greet: say the opening line in typed mode (not on first load)."""
+    ss_ = st.session_state
+    ss_.call_count = ss_.get("call_count", 0) + 1
+    ss_.call_id = voice_server.new_call(ss_.caller_plan, ss_.call_count)
+    ss_.speak_text = intake.OPENING if greet else None
+
+
+def _typed(plan: dict) -> None:
+    """A typed caller line: same conversation store as the voice call."""
+    ss_ = st.session_state
+    text = (ss_.get(f"caller_msg_{ss_.call_id}") or "").strip()
+    if text:
+        with st.spinner("Agent is replying..."):
+            out = voice_server.turn(ss_.call_id, text)
+        ss_.speak_text = out["reply"]
+
+
+def _speak_once(text: str, use_voice: bool) -> None:
+    """Say a typed-mode reply: ElevenLabs when a key is set, else the browser's built-in voice."""
+    audio = voice.speak(text) if use_voice else None
+    if audio:
+        st.audio(audio, format="audio/mp3", autoplay=True)
+        return
+    components.html(  # browser speech synthesis: free, offline, no key
+        f"<script>/*{hash(text) ^ id(text)}*/const u=new SpeechSynthesisUtterance({json.dumps(text)});u.rate=1.05;"
+        f"speechSynthesis.cancel();speechSynthesis.speak(u);</script>", height=0)
+
+
+def _caller_map(state: dict, plan: dict) -> None:
+    """The caller's pin, the nearest crew's jobs in colour, everything else faint."""
+    lat, lon = state["lat"], state["lon"]
+    nearest = min(plan["crews"], key=lambda c: intake._km(lat, lon, *c["centroid"]))
+    r, g, b = CREW_COLORS[(nearest["crew"] - 1) % len(CREW_COLORS)]
+    jobs = [{**j, "crew": c["crew"], "color": [r, g, b, 230] if c is nearest else [150, 150, 150, 90],
+             "radius": 6 if c is nearest else 3} for c in plan["crews"] for j in c["jobs"]]
+    pin = [{"lat": lat, "lon": lon, "type": "Caller report", "where": state["where"]}]
+    layers = [
+        pdk.Layer("ScatterplotLayer", jobs, get_position="[lon, lat]", get_fill_color="color", get_radius="radius",
+                  radius_units="'pixels'", pickable=True),
+        pdk.Layer("ScatterplotLayer", pin, get_position="[lon, lat]", get_fill_color=[214, 39, 40], get_radius=11,
+                  radius_units="'pixels'", stroked=True, get_line_color=[255, 255, 255], line_width_min_pixels=3,
+                  pickable=True),
+        pdk.Layer("TextLayer", [{"lat": nearest["centroid"][0], "lon": nearest["centroid"][1],
+                                 "label": f"Crew {nearest['crew']}"}], get_position="[lon, lat]", get_text="label",
+                  get_color=[r, g, b], get_size=14, font_weight=700),
+    ]
+    st.pydeck_chart(pdk.Deck(layers=layers, initial_view_state=pdk.ViewState(latitude=lat, longitude=lon, zoom=12),
+                             map_provider="carto", map_style="light",
+                             tooltip={"text": "{type} {where}"}),
+                    key=f"caller_map_{lat:.5f}_{lon:.5f}", height=260,
+                    alt="Map with the caller's reported location and the nearest crew's jobs")
+    approx = " · approximate (one street of the pair)" if state["precision"] == "approximate" else ""
+    st.caption(f":material/location_on: **{state['where']}**{approx} · red = caller's report, colour = crew "
+               f"{nearest['crew']}'s jobs today")
+
+
+def _render_call(call_id: str, plan: dict, on_add=None) -> None:
+    """Transcript, map and ticket for one call; re-run every second so voice turns appear live."""
+    call = voice_server.get(call_id)
+    if call is None:
+        return
+    for m in call["history"]:
+        with st.chat_message(m["role"], avatar=":material/call:" if m["role"] == "user" else ":material/support_agent:"):
+            st.write(m["content"])
+    if call["source"]:
+        st.caption({"claude": ":material/auto_awesome: Replies by Claude.",
+                    "rules": ":material/rule: Rule-based call-taker (Claude unavailable: no API key or no "
+                             "connection)."}[call["source"]])
+    state = call["state"]
+    if state["lat"] is not None:
+        _caller_map(state, plan)
+    elif state["failed_location"]:
+        st.caption(f":material/wrong_location: Couldn't place “{state['failed_location']}” on the map yet.")
+    t = call["ticket"]
+    if t:
+        with st.container(border=True):
+            st.markdown(f"**:material/assignment_turned_in: Ticket {t['id']} logged** · {t['type']}"
+                        )
+            if t["safety"]:
+                st.badge("Safety ticket", color="red")
+            where = f"- **Where:** {t['where']}" + (f" ({t['community'].title()})" if t["community"] else "")
+            nearest = f"- **Nearest crew:** Crew {t['crew']} ({t['zone']}), {t['crew_km']} km from its zone centre"
+            if on_add is None:
+                st.markdown("\n".join([where, f"- **Priority:** {p10(t['P']):.1f} / 10 (P {t['P']:.2f}, type weight {t['P']:g}, new today, "
+                                        f"1 report)", nearest, f"- **Today's plan:** {t['fit']}"]))
+            else:
+                sev = caller_severity(t)
+                st.markdown("\n".join([where, f"- **Severity:** {day_live.SEVERITY_LABELS[sev]} ({sev} of 3)",
+                                        nearest]))
+            st.caption(f"Caller said: “{t['details']}”")
+            if on_add is not None:
+                added = call_id in st.session_state.get("added_calls", set())
+                if st.button("Added to today's plan" if added else "Add to today's plan", type="primary",
+                             icon=":material/check:" if added else ":material/playlist_add:", disabled=added,
+                             key=f"add_call_{call_id}", width="stretch"):
+                    on_add(call_id, t)
+                    st.rerun(scope="app")  # this runs inside the live fragment: refresh the whole page
+                result = st.session_state.get("added_effects", {}).get(call_id)
+                if result:
+                    st.success(result, icon=":material/check_circle:")
+
+
+def caller_severity(ticket: dict) -> int:
+    """A caller ticket's severity on the live-day scale: type weight 3 -> high (2), 2 -> routine (1), 1 -> low (0)."""
+    return max(0, min(2, int(round(ticket["P"])) - 1))
+
+
+def render_caller_intake(plan: dict, on_add=None) -> None:
+    """Caller report: talk (or type) to the 311 agent until it knows what the problem is and exactly where."""
+    if intake is None:
+        st.caption("Caller intake isn't available (dispatch/intake.py failed to import).")
+        return
+    ss_ = st.session_state
+    ss_.caller_plan = plan
+    if not ss_.get("call_id") or voice_server.get(ss_.call_id) is None:
+        _new_call(greet=False)
+    use_voice = voice.has_voice_key()
+    port = voice_api_port()
+
+    st.caption("Talk to the 311 agent as the caller. It asks follow-up questions until it knows what the "
+               "problem is and exactly where, then logs a scored ticket.")
+    if port:
+        hint = ("Natural voice: ElevenLabs." if use_voice else
+                "Voice: your browser's built-in voice. Add ELEVENLABS_API_KEY to .env for a natural voice.")
+        html = (VOICE_WIDGET.read_text(encoding="utf-8").replace("__API__", f"http://127.0.0.1:{port}")
+                .replace("__CALL__", ss_.call_id).replace("__OPENING__", json.dumps(intake.OPENING))
+                .replace("__VOICE__", hint + " Works in Chrome or Edge; allow the microphone when asked."))
+        components.html(html, height=104)
+    else:
+        st.caption(":material/mic_off: The voice service couldn't start (no free port from 8502). Type below.")
+
+    c_speak, c_new = st.columns([3, 2], vertical_alignment="center")
+    c_speak.toggle("Read typed replies aloud", key="speak_replies", value=False,
+                   help="For typed messages. The voice call always speaks its replies.")
+    c_new.button("New call", icon=":material/restart_alt:", on_click=_new_call, key="new_call", width="stretch")
+
+    st.fragment(_render_call, run_every=1.0)(ss_.call_id, plan, on_add)
+
+    text = ss_.pop("speak_text", None)
+    if text and ss_.get("speak_replies"):
+        _speak_once(text, use_voice)
+    call = voice_server.get(ss_.call_id)
+    if call and not call["done"]:
+        st.chat_input("Or type what the caller says...", key=f"caller_msg_{ss_.call_id}",
+                      on_submit=_typed, args=(plan,))
+
 
 def render_crew_list(plan: dict, out_crews: set) -> None:
     """Crew titles only: colour dot, Crew N, zone. Clicking one switches to it."""
@@ -667,6 +928,17 @@ def _place_pending(lat: float, lon: float) -> None:
     day_live.finish_location(job, lat, lon, "map click")
     _apply({**ss.pending["event"], "source": ss.pending["event"].get("source")}, ss.pending["received"])
 
+def _add_call(call_id: str, ticket: dict) -> None:
+    """Put a caller's logged report on today's plan as a new job (located already), then replan."""
+    spec = day_live.make_job_spec(ticket["type"], caller_severity(ticket), ticket["where"], ticket["community"],
+                                  ticket["details"])
+    day_live.finish_location(spec, ticket["lat"], ticket["lon"], "caller report (OpenStreetMap)")
+    _apply({"event": "new_job", "job": spec, "crew": None, "capacity": 1.0, "question": None, "source": "caller"},
+           f"Caller: {ticket['details']}")
+    ss.added_calls = ss.get("added_calls", set()) | {call_id}
+    effect = (ss.applied or {}).get("effect") or "Added to today's plan; the day was replanned."
+    ss.added_effects = {**ss.get("added_effects", {}), call_id: effect}
+
 
 def _cancel_pending() -> None:
     ss.pending = None
@@ -770,20 +1042,7 @@ with left:
     elif ss.selected_job:
         render_job_detail(sel_job, sel_job_crew, view)
     else:
-        with st.container(border=True):
-            st.markdown("**Supervisor briefing**")
-            if view == "FIFO":
-                st.write(f"Baseline: oldest tickets first, same crews and zones. It covers {m['safety']} safety "
-                         f"tickets, versus {metrics['8am']['safety']} in our plan.")
-            else:
-                if view == "Agent":
-                    text, src = cached_briefing("8am", data["plan_8am"], metrics, "8am")
-                else:
-                    ev = ss.noon["event"]
-                    digest = hashlib.md5(json.dumps(ss.log, sort_keys=True, default=str).encode()).hexdigest()
-                    text, src = cached_briefing(f"noon:{digest}", plan, ss.noon["metrics"], "noon", changes, event=ev)
-                st.write(text)
-                st.caption(SOURCE_NOTES[src])
+        render_briefings(view, data, metrics)
 
 with right:
     render_crew_list(plan, out_crews)
@@ -798,67 +1057,73 @@ with right:
         else:
             st.badge("Rule-based", icon=":material/rule:", color="gray",
                      help="No ANTHROPIC_API_KEY on this machine: the rule-based parser reads updates.")
-    with st.form("crew_update", clear_on_submit=True, border=False):
-        st.text_area("Update", key="update_text", height=80, label_visibility="collapsed",
-                     placeholder="e.g. crew 4 called in sick, or: sinkhole at 8 Ave SW and 4 St SW")
-        st.form_submit_button("Submit update", type="primary", icon=":material/send:", on_click=_submit,
-                              width="stretch")
-    with st.expander("Examples"):
-        for text in QUICK_FILLS:
-            st.button(text, type="tertiary", on_click=_run, args=(text,), key=f"example_{text}")
+    crew_tab, caller_tab = st.tabs([":material/engineering: Crew update", ":material/call: Caller report"],
+                                   key="report_tab", on_change="rerun")  # keyed: stays put across reruns
+    with caller_tab:
+        render_caller_intake(ss.noon["plan"] if ss.noon and "plan" in ss.noon else data["plan_8am"],
+                             on_add=_add_call if day_live else None)
+    with crew_tab:
+        with st.form("crew_update", clear_on_submit=True, border=False):
+            st.text_area("Update", key="update_text", height=80, label_visibility="collapsed",
+                         placeholder="e.g. crew 4 called in sick, or: sinkhole at 8 Ave SW and 4 St SW")
+            st.form_submit_button("Submit update", type="primary", icon=":material/send:", on_click=_submit,
+                                  width="stretch")
+        with st.expander("Examples"):
+            for text in QUICK_FILLS:
+                st.button(text, type="tertiary", on_click=_run, args=(text,), key=f"example_{text}")
 
-    if ss.get("applied"):
-        ev, got = ss.applied["event"], ss.applied["received"]
-        with st.container(border=True):
-            st.markdown(f":material/check_circle: **{'No change.' if ss.applied.get('noop') else 'Replanned.'}** "
-                        f"{describe(ev)}")
-            if ss.applied.get("effect"):
-                st.markdown(ss.applied["effect"])
-            if got:
-                st.caption(f"“{got}”")
-            st.caption(read_by(ev))
-            if ev.get("event") == "new_job":
-                job = ev["job"]
-                where = job.get("resolved") or job.get("address") or ""
-                st.caption(f":material/location_on: Located by {job.get('location_source', 'map click')}"
-                           + (f": {where}" if where else "") + f" · severity {job['severity']} of 3")
-            with st.expander("Parsed result (JSON)"):
-                st.json({k: v for k, v in ev.items() if k not in ("source", "why")})
+        if ss.get("applied"):
+            ev, got = ss.applied["event"], ss.applied["received"]
+            with st.container(border=True):
+                st.markdown(f":material/check_circle: **{'No change.' if ss.applied.get('noop') else 'Replanned.'}** "
+                            f"{describe(ev)}")
+                if ss.applied.get("effect"):
+                    st.markdown(ss.applied["effect"])
+                if got:
+                    st.caption(f"“{got}”")
+                st.caption(read_by(ev))
+                if ev.get("event") == "new_job":
+                    job = ev["job"]
+                    where = job.get("resolved") or job.get("address") or ""
+                    st.caption(f":material/location_on: Located by {job.get('location_source', 'map click')}"
+                               + (f": {where}" if where else "") + f" · severity {job['severity']} of 3")
+                with st.expander("Parsed result (JSON)"):
+                    st.json({k: v for k, v in ev.items() if k not in ("source", "why")})
 
-    if ss.get("parse_error") and not ss.parsed:
-        with st.container(border=True):
-            st.error("Couldn't read that update automatically. Pick the crew and what happened:")
-            st.caption(ss.parse_error)
-            crew = st.selectbox("Crew", range(1, 9), index=3)
-            kind = st.radio("Status", ["Out for the day", "Short-handed (50%)"])
-            st.button("Use this update", on_click=_manual,
-                      args=(crew, "crew_out" if kind.startswith("Out") else "crew_partial"))
+        if ss.get("parse_error") and not ss.parsed:
+            with st.container(border=True):
+                st.error("Couldn't read that update automatically. Pick the crew and what happened:")
+                st.caption(ss.parse_error)
+                crew = st.selectbox("Crew", range(1, 9), index=3)
+                kind = st.radio("Status", ["Out for the day", "Short-handed (50%)"])
+                st.button("Use this update", on_click=_manual,
+                          args=(crew, "crew_out" if kind.startswith("Out") else "crew_partial"))
 
-    if ss.parsed:  # only reached for an ambiguous message
-        event = ss.parsed
-        with st.container(border=True):
-            st.markdown("**:material/help: One detail needed**")
-            st.caption(f"“{ss.get('received', '')}”")
-            st.markdown(f"**{event.get('question') or 'Which crew is affected?'}**")
-            picks = event.get("candidates") or []
-            if picks:  # several crews named: one click picks the one to replan
-                for col, n in zip(st.columns(len(picks)), picks):
-                    col.button(f"Crew {n}", key=f"pick_{n}", on_click=_run, args=(ss.received, n), width="stretch")
-            elif event.get("crew"):  # crew known, status unknown
-                st.button("Out for the day", key="manual_out", icon=":material/person_off:", width="stretch",
-                          on_click=_manual, args=(event["crew"], "crew_out"))
-                st.button("Short-handed (50%)", key="manual_part", icon=":material/group_remove:", width="stretch",
-                          on_click=_manual, args=(event["crew"], "crew_partial"))
-            else:
-                st.text_input("Your answer", key="followup", placeholder="e.g. crew 4, or: pothole at 5 Ave SW",
-                              on_change=_answer)
-                st.button("Send answer", icon=":material/reply:", on_click=_answer)
+        if ss.parsed:  # only reached for an ambiguous message
+            event = ss.parsed
+            with st.container(border=True):
+                st.markdown("**:material/help: One detail needed**")
+                st.caption(f"“{ss.get('received', '')}”")
+                st.markdown(f"**{event.get('question') or 'Which crew is affected?'}**")
+                picks = event.get("candidates") or []
+                if picks:  # several crews named: one click picks the one to replan
+                    for col, n in zip(st.columns(len(picks)), picks):
+                        col.button(f"Crew {n}", key=f"pick_{n}", on_click=_run, args=(ss.received, n), width="stretch")
+                elif event.get("crew"):  # crew known, status unknown
+                    st.button("Out for the day", key="manual_out", icon=":material/person_off:", width="stretch",
+                              on_click=_manual, args=(event["crew"], "crew_out"))
+                    st.button("Short-handed (50%)", key="manual_part", icon=":material/group_remove:", width="stretch",
+                              on_click=_manual, args=(event["crew"], "crew_partial"))
+                else:
+                    st.text_input("Your answer", key="followup", placeholder="e.g. crew 4, or: pothole at 5 Ave SW",
+                                  on_change=_answer)
+                    st.button("Send answer", icon=":material/reply:", on_click=_answer)
 
-    if ss.noon and "error" in ss.noon:
-        st.error(f"Replan engine isn't available: {ss.noon['error']}")
-    if ss.log:
-        with st.container(border=True):
-            st.markdown(f"**Today's updates ({len(ss.log)})**")
-            st.markdown("\n".join(f"{i}. {day_live.describe_event(e)}" for i, e in enumerate(ss.log, 1)))
-            st.button("Undo last update", icon=":material/undo:", on_click=_undo, width="stretch")
-            st.button("Reset to 8 a.m. plan", icon=":material/restart_alt:", on_click=_reset, width="stretch")
+        if ss.noon and "error" in ss.noon:
+            st.error(f"Replan engine isn't available: {ss.noon['error']}")
+        if ss.log:
+            with st.container(border=True):
+                st.markdown(f"**Today's updates ({len(ss.log)})**")
+                st.markdown("\n".join(f"{i}. {day_live.describe_event(e)}" for i, e in enumerate(ss.log, 1)))
+                st.button("Undo last update", icon=":material/undo:", on_click=_undo, width="stretch")
+                st.button("Reset to 8 a.m. plan", icon=":material/restart_alt:", on_click=_reset, width="stretch")

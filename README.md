@@ -53,7 +53,9 @@ flowchart LR
 | Metrics | `dispatch/metrics.py` | P served, safety count, jobs, moved, dropped, safety dropped |
 | Language | `dispatch/llm.py` | Claude turns a free-text sick call into a structured event and writes the briefings; regex and template fallbacks run without a key or network |
 | Pipeline | `dispatch/run.py` | Runs everything; writes `dispatch/outputs/*.json`, including the 8 a.m. and noon briefings |
-| Dashboard | `dispatch/app.py` | Streamlit: agent vs FIFO, map, crews, briefing, and the sick-call → confirm → replan loop |
+| Caller intake | `dispatch/intake.py` | 311 call-taker chat: asks follow-ups until it knows what the problem is and exactly where (OpenStreetMap geocoding), then scores the ticket and names the nearest crew |
+| Voice | `dispatch/voice_server.py`, `voice_call.html`, `voice.py` | Hands-free voice call: the browser listens, a local API runs each turn, the agent answers aloud (ElevenLabs, or the browser's voice without a key) |
+| Dashboard | `dispatch/app.py` | Streamlit: agent vs FIFO, map, crews, 8 a.m. and noon briefings, the sick-call → replan loop, and the caller chat |
 
 The planning is deterministic code. Claude only reads the supervisor's message and writes the
 briefing from numbers the code computed. Every parse is shown to the supervisor before it changes
@@ -68,15 +70,25 @@ pip install -r requirements.txt
 python -m dispatch.run                    # rebuild the plans and outputs; prints both briefings
 python -m streamlit run dispatch/app.py   # dashboard at http://localhost:8501
 python -m tests.test_core                 # 11 checks, including the numbers above
+python -m tests.test_intake               # caller chat: follow-up questions, locations, tickets (offline)
 python -m tests.sensitivity               # the ±1 weight table
 ```
 
 The output files are committed, so the dashboard also works without running the pipeline first.
 
 **Claude (optional).** Copy `.env.example` to `.env` and put your key after `ANTHROPIC_API_KEY=`.
-`.env` is gitignored. Without a key, or without internet, the app uses the rule-based parser and
-template briefings, and labels them as such on screen. Check the key with
+`.env` is gitignored. Without a key, or without internet, the app uses the rule-based parser,
+template briefings and a rule-based call-taker, and labels them as such on screen. Check the key with
 `python -c "from dispatch.llm import has_api_key; print(has_api_key())"`.
+
+**Caller voice call.** In the dashboard, open **Report an update → Caller report** and press the red
+microphone button (Chrome or Edge; allow the microphone). Talk like a caller, e.g. "there's a pothole
+where I am right now". The agent answers out loud and keeps listening, asking one follow-up at a time
+("Where exactly is the pothole?") until it knows what and where; then it logs a scored ticket and pins
+it on the map. You can also type instead. Locations are looked up on OpenStreetMap (needs internet).
+
+**Voice (optional).** Add `ELEVENLABS_API_KEY=` to `.env` and the agent speaks in a natural ElevenLabs
+voice. Without it, the call still works using the browser's built-in voice.
 
 ## Limits (what this does not do)
 

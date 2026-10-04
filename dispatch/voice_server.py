@@ -47,13 +47,13 @@ def turn(call_id: str, text: str) -> dict:
         raise KeyError("unknown call")
     with call["turn_lock"]:
         if call["done"]:
-            return {"reply": "This report is already logged. Start a new call for another problem.",
-                    "done": True, "source": call["source"]}
+            return {"reply": "This call has ended. Start a new call for another problem.",
+                    "done": True, "logged": bool(call["ticket"]), "source": call["source"]}
         call["history"].append({"role": "user", "content": text})
         out = intake.intake_turn(call["history"], call["state"])
         call["history"].append({"role": "assistant", "content": out["reply"]})
         call.update(done=out["done"], source=out["source"])
-        if out["done"] and not call["ticket"]:
+        if out["logged"] and not call["ticket"]:
             call["ticket"] = intake.make_ticket(call["state"], call["plan"], call["n"])
         call["version"] += 1
         return out

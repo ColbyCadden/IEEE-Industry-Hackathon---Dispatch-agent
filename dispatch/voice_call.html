@@ -87,9 +87,11 @@ async function send(text) {
                                           body: JSON.stringify({call_id: CALL, text})});
     const out = await r.json();
     if (!r.ok) throw new Error(out.error || r.status);
-    heard.textContent = "";
+    heard.textContent = "Agent: " + out.reply;
     await speak(out.reply);
-    if (out.done) stop("Report logged. Press New call for another caller.", "done");
+    heard.textContent = "";
+    if (out.done) stop(out.logged ? "Report logged. Press New call for another caller."
+                                  : "Caller hung up, nothing logged. Press New call for another caller.", "done");
     else listen();
   } catch (e) {
     stop("Lost the dashboard's voice service (" + e.message + "). Refresh the page.", "error");

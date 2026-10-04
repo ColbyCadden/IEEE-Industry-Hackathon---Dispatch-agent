@@ -79,7 +79,45 @@ def main() -> int:
 
     # no type yet -> asks what the problem is
     s, r, done = call("hi I want to report something")
-    results.append(check("no problem stated -> asks what", s["service_name"] is None and "what is the problem" in r[-1].lower(), r[-1]))
+    results.append(check("no problem stated -> asks what", s["service_name"] is None
+                         and r[-1].startswith("Sure.") and "what is the problem" in r[-1].lower(), r[-1]))
+
+    # talking about the call itself is never looked up on the map
+    pothole = "hi there's a pothole where I am right now"
+    s, r, done = call(pothole, "sorry could u repeat again")
+    results.append(check("'repeat' after 'where?' -> repeats the question", r[-1].startswith("Sure.")
+                         and "where exactly" in r[-1].lower() and s["failed_location"] is None
+                         and "repeat" not in s["details"][-1], r[-1]))
+    s, r, done = call(pothole, "sorry could u repeat again", "what?", "17th ave and 4th st SW")
+    results.append(check("repeat twice, then answer -> located", r[1] == r[2] and s["lat"] is not None
+                         and "hazard" in r[-1].lower(), " | ".join(r)))
+    s, r, done = call(pothole, "17th ave and 4th st SW", "sorry what was the question")
+    results.append(check("'what was the question' at hazard -> repeats it, not counted as the answer",
+                         "hazard" in r[-1].lower() and not s["hazard_answered"] and not done, r[-1]))
+    s, r, done = call(pothole, "can you hear me")
+    results.append(check("'can you hear me' -> yes + question", r[-1].startswith("Yes, I can hear you"), r[-1]))
+    s, r, done = call("hello")
+    results.append(check("greeting only -> greets back + asks what", r[-1].startswith("Hi there")
+                         and "what problem" in r[-1].lower(), r[-1]))
+    s, r, done = call(pothole, "I don't know the address")
+    results.append(check("doesn't know the address -> helps, no failed lookup",
+                         "closest street" in r[-1] and s["failed_location"] is None, r[-1]))
+    s, r, done = call(pothole, "how long will it take to fix")
+    results.append(check("caller question -> answered + asks again", r[-1].startswith("Crews are scheduled")
+                         and "where exactly" in r[-1].lower(), r[-1]))
+    s, r, done = call(pothole, "um yeah okay so")
+    results.append(check("filler -> asks where again, no lookup", s["failed_location"] is None
+                         and "didn't catch a location" in r[-1], r[-1]))
+    s, r, done = call(pothole, "never mind, forget it")
+    results.append(check("caller hangs up -> done, nothing logged", done and not intake.ready(s), r[-1]))
+    s, r, done = call(pothole, "17th ave and 4th st SW", "no that's wrong", "1000 9 Ave SW")
+    results.append(check("'that's wrong' -> asks again, new place used", s["where"].startswith("Gibraltar")
+                         and "hazard" in r[-1].lower(), " | ".join(r)))
+    s, r, done = call(pothole, "1000 9 Ave SW", "no actually it's at 17th ave and 4th st SW")
+    results.append(check("correction with a new place -> re-located", s["where"] == "17 Avenue SW & 4 Street SW",
+                         s["where"]))
+    s, r, done = call("my streetlight is out")
+    results.append(check("other City team -> says so", "different City team" in r[-1], r[-1]))
 
     # emergency wording -> 911 advice first
     s, r, done = call("there was a crash and someone is hurt, a sign is down")

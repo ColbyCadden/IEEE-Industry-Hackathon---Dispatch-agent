@@ -742,6 +742,8 @@ def _render_call(call_id: str, plan: dict, on_add=None) -> None:
     elif state["failed_location"]:
         st.caption(f":material/wrong_location: Couldn't place “{state['failed_location']}” on the map yet.")
     t = call["ticket"]
+    if call["done"] and not t:
+        st.caption(":material/call_end: The caller ended the call; nothing was logged. Press New call to start again.")
     if t:
         with st.container(border=True):
             st.markdown(f"**:material/assignment_turned_in: Ticket {t['id']} logged** · {t['type']}"

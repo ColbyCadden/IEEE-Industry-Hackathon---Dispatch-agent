@@ -25,20 +25,38 @@ try:  # new urgent jobs and the day's running log of updates
 except Exception:
     day_live = None
 
+try:  # the score formula and its 0-10 display scale live in one place
+    from dispatch import scoring  # noqa: E402
+except Exception:
+    scoring = None
+
 OUT = ROOT / "dispatch" / "outputs"
 CREW_COLORS = [  # one per crew, readable on a light basemap
     [31, 119, 180], [255, 127, 14], [44, 160, 44], [214, 39, 40],
     [148, 103, 189], [140, 86, 75], [227, 119, 194], [23, 190, 207],
 ]
+OURS_COLOR = "rgb(44,160,44)"   # our agent, everywhere on the page
+FIFO_COLOR = "rgb(130,130,130)"  # the oldest-first baseline
 QUICK_FILLS = ["Crew 4 called in sick", "Crew 2 is down a guy",
                "Urgent pothole in Marlborough near a school",
                "Sinkhole at 8 Ave SW and 4 St SW blocking traffic",
                "Stop sign knocked down at 17 Ave SW and 14 St SW"]
 NUMBER_WORDS = {"one", "two", "three", "four", "five", "six", "seven", "eight"}
-EVENT_BADGES = {  # event -> (label, badge colour, icon) for the interpretation panel
-    "crew_out": ("Crew out for the day", "red", ":material/person_off:"),
-    "crew_partial": ("Crew short-handed", "orange", ":material/group_remove:"),
-}
+
+
+def p10(p: float) -> float:
+    """P on the 0-10 display scale (scoring.priority_10, or 2 x P if scoring.py doesn't provide it)."""
+    scale = getattr(scoring, "priority_10", None)
+    return scale(p) if scale else round(min(10.0, 2 * p), 1)
+
+
+def crew_rgb(crew: int) -> list:
+    return CREW_COLORS[(crew - 1) % len(CREW_COLORS)]
+
+
+def dot(crew: int, size: str = "1.2em") -> str:
+    r, g, b = crew_rgb(crew)
+    return f"<span style='color:rgb({r},{g},{b});font-size:{size}'>●</span>"
 
 
 # --- data ------------------------------------------------------------------
@@ -83,12 +101,20 @@ def load_outputs() -> dict:
 
 
 @st.cache_data
+def load_event() -> dict | None:
+    """The disruption the pipeline replanned for (dispatch/outputs/event.json)."""
+    try:
+        return json.loads((OUT / "event.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+@st.cache_data
 def load_ticket_details() -> dict:
     """id -> {days_open, weight, requested_date} from the engine's own scoring (read-only)."""
     try:
         from dispatch.data_prep import load_clean_tickets
-        from dispatch.scoring import score
-        df = score(load_clean_tickets(str(ROOT / "data" / "311_dispatch_sample.csv")))
+        df = scoring.score(load_clean_tickets(str(ROOT / "data" / "311_dispatch_sample.csv")))
         return {r.id: {"days_open": int(r.days_open), "weight": float(r.weight),
                        "requested_date": r.requested_date.strftime("%b %d, %Y")}
                 for r in df.itertuples(index=False)}
@@ -107,6 +133,14 @@ def build_day(plan_8am: dict, metrics: dict, log: list) -> dict:
 # --- llm wrappers (contract signatures only; fall back if llm.py fails) ------
 
 EVENTS = ("crew_out", "crew_partial", "new_job", "unclear")
+
+
+def claude_ready() -> bool:
+    """True when an API key is configured, so Claude will be tried first."""
+    try:
+        return bool(llm and llm.USE_LLM and llm.has_api_key())
+    except Exception:
+        return False
 
 
 def _source(kind: str) -> str:
@@ -173,9 +207,59 @@ def cached_briefing(key: str, *args, **kwargs) -> tuple[str, str]:
 
 SOURCE_NOTES = {
     "claude": ":material/auto_awesome: Written by Claude from the plan's numbers.",
-    "rules": ":material/rule: Claude unavailable (no API key or no connection) - rule-based template briefing.",
-    "numbers": ":material/warning: Briefing service unavailable - showing the numbers only.",
+    "rules": ":material/rule: Rule-based template (Claude unavailable: no API key or no connection).",
+    "numbers": ":material/info: Briefing service unavailable, showing the numbers only.",
 }
+
+
+def read_by(ev: dict) -> str:
+    """Which reader turned the supervisor's message into this update."""
+    src, why = ev.get("source"), str(ev.get("why", ""))
+    if src == "claude":
+        return ":material/auto_awesome: Read by **Claude**"
+    if src == "manual":
+        return ":material/edit: Entered by hand"
+    if why.startswith("fallback"):
+        return ":material/rule: Read by the **rule-based parser** (Claude unavailable: no API key or no connection)"
+    return ":material/rule: Read by the **rule-based parser** (simple message, no Claude call needed)"
+
+
+# --- selection ----------------------------------------------------------------
+
+def select_crew(crew: int) -> None:
+    """Switch straight to this crew (no need to deselect the previous one)."""
+    st.session_state.selected_crew = crew
+    st.session_state.selected_job = None
+
+
+def show_all() -> None:
+    st.session_state.selected_crew = None
+    st.session_state.selected_job = None
+
+
+def select_job(job_id: str | None, crew: int | None = None) -> None:
+    """Select a job; its crew becomes the selected crew too, so the list and map stay in sync."""
+    st.session_state.selected_job = job_id
+    if crew is not None:
+        st.session_state.selected_crew = crew
+
+
+def find_job(plan: dict, changes: dict | None, job_id: str | None) -> tuple[dict | None, dict | None]:
+    """(job, crew) for job_id in this plan; crew is None for a job deferred at noon."""
+    if not job_id:
+        return None, None
+    for c in plan["crews"]:
+        for j in c["jobs"]:
+            if j["id"] == job_id:
+                return j, c
+    for j in (changes or {}).get("dropped_jobs", []):
+        if j["id"] == job_id:
+            return j, None
+    return None, None
+
+
+def find_crew(plan: dict, crew_id: int | None) -> dict | None:
+    return next((c for c in plan["crews"] if c["crew"] == crew_id), None) if crew_id else None
 
 
 # --- view helpers ------------------------------------------------------------
@@ -198,155 +282,122 @@ def describe(event: dict) -> str:
     return "I couldn't tell what changed."
 
 
-def find_job(plan: dict, changes: dict | None, job_id: str | None) -> tuple[dict | None, dict | None]:
-    """(job, crew) for job_id in this plan; crew is None for a job deferred at noon."""
-    if not job_id:
-        return None, None
-    for c in plan["crews"]:
-        for j in c["jobs"]:
-            if j["id"] == job_id:
-                return j, c
-    for j in (changes or {}).get("dropped_jobs", []):
-        if j["id"] == job_id:
-            return j, None
-    return None, None
-
-
-def select_job(job_id: str | None) -> None:
-    st.session_state.selected_job = job_id
-
-
-def toggle_crew(crew: int) -> None:
-    ss_ = st.session_state
-    ss_.selected_crew = None if ss_.selected_crew == crew else crew
-
-
-def find_crew(plan: dict, crew_id: int | None) -> dict | None:
-    return next((c for c in plan["crews"] if c["crew"] == crew_id), None) if crew_id else None
-
-
-def _job_label(j: dict, moved: set) -> str:
-    return ((" ⚠️" if j["safety"] else "") + (" ↪ moved" if j["id"] in moved else "")
-            + (" ★ new" if j.get("new") else ""))
+def job_badges(job: dict, moved: set) -> None:
+    """Clean labels instead of symbols: Safety / Moved / New today."""
+    if job["safety"]:
+        st.badge("Safety", color="red")
+    if job["id"] in moved:
+        st.badge("Moved", color="orange")
+    if job.get("new"):
+        st.badge("New today", color="blue")
 
 
 def render_job_detail(job: dict | None, crew: dict | None, view: str) -> None:
-    """Details for the selected job, including how its priority score was built."""
+    """What the selected job is, and how its priority was scored."""
     job_id = st.session_state.selected_job
     with st.container(border=True):
-        head, close = st.columns([5, 2], vertical_alignment="center")
-        head.markdown(f"**:material/my_location: Ticket {job_id}**")
-        close.button("Clear job", icon=":material/close:", type="tertiary", on_click=select_job, args=(None,),
-                     key="clear_job")
+        with st.container(horizontal=True, vertical_alignment="center"):
+            st.markdown(f"**Ticket {job_id}**")
+            st.space("stretch")
+            st.button("Close", icon=":material/close:", type="tertiary", on_click=select_job, args=(None,),
+                      key="clear_job")
         if job is None:
-            st.caption(f"This ticket isn't on the {view} plan. Switch views or clear the selection.")
+            st.caption(f"This ticket isn't on the {view} plan. Switch plans or close it.")
             return
-        if job["safety"]:
-            st.badge("Safety ticket", icon=":material/warning:", color="red")
+        with st.container(horizontal=True, vertical_alignment="center"):
+            st.markdown(f"### {job['type']}")
+            job_badges(job, set())
+        where = f"Crew {crew['crew']} · {crew['zone']} zone" if crew else "Deferred to tomorrow"
+        st.metric("Priority", f"{p10(job['P']):.1f} / 10")
+
         info = load_ticket_details().get(job_id)
-        where = (f"Crew {crew['crew']} ({crew['zone']})" if crew else "Deferred at noon")
         if job.get("new"):  # reported after 8 a.m.: no ticket history, so show how it was read and scored
             sev = day_live.SEVERITY_LABELS.get(job.get("severity"), "high") if day_live else job.get("severity")
-            st.badge("Reported today", icon=":material/add_alert:", color="orange")
-            rows = [("Problem", job["type"]), ("Severity", f"{job.get('severity')} ({sev})"),
-                    ("Community", job["community"].title()),
+            rows = [("Assigned to", where), ("Community", job["community"].title()),
                     ("Address", job.get("address") or "not given"),
-                    ("Location", f"{job['lat']:.5f}, {job['lon']:.5f} ({job.get('location_source') or 'pinned'})"),
-                    ("Assigned to", where)]
-            st.markdown("\n".join(f"- **{k}:** {v}" for k, v in rows))
-            if job.get("summary"):
-                st.caption(f"\u201c{job['summary']}\u201d")
-            st.markdown(f"**Priority score:** severity {job.get('severity')} sets **P {job['P']:.2f}**. "
-                        "Emergencies (severity 3) always rank above every job already on the plan.")
-            return
-        rows = [
-            ("Service type", job["service_name"]),
-            ("Community", job["community"].title()),
-            ("Location", f"{job['lat']:.5f}, {job['lon']:.5f}"),
-            ("Assigned to", where),
-            ("Days open", f"{info['days_open']} (reported {info['requested_date']})" if info else "n/a"),
-            ("Reports", f"{job['reports']} ({job['reports'] - 1} duplicate)" if job["reports"] > 1
-             else "1 (no duplicates)"),
-            ("Safety ticket", "Yes (pothole or missing/damaged sign)" if job["safety"] else "No"),
-        ]
-        st.markdown("\n".join(f"- **{k}:** {v}" for k, v in rows))
-        st.caption("The source data has no street address; the coordinates are the precise location.")
-        if info:
-            extra = job["reports"] - 1
-            st.markdown(
-                f"**Priority score:** {info['weight']:g} type weight + 0.25 × {info['days_open']} "
-                f"day{'s' if info['days_open'] != 1 else ''} open + 0.5 × {extra} extra "
-                f"report{'s' if extra != 1 else ''} = **P {job['P']:.2f}**")
+                    ("Reported", "today, after 8 a.m."),
+                    ("Severity", f"{job.get('severity')} of 3 ({sev})")]
+            score_text = (f"severity {job.get('severity')} sets P {job['P']:.2f}. Emergencies (severity 3) "
+                          "always rank above every job already on the plan.")
         else:
-            st.markdown(f"**Priority score:** P {job['P']:.2f}")
+            rows = [("Assigned to", where), ("Community", job["community"].title()),
+                    ("Service type", job["service_name"]),
+                    ("Days open", f"{info['days_open']} (reported {info['requested_date']})" if info else "n/a"),
+                    ("Reports", f"{job['reports']} ({job['reports'] - 1} duplicate)" if job["reports"] > 1
+                     else "1")]
+            explain = getattr(scoring, "explain", None)
+            score_text = (explain(info["weight"], info["days_open"], job["reports"])
+                          if info and explain else f"P {job['P']:.2f}")
+        rows.append(("Location", f"{job['lat']:.5f}, {job['lon']:.5f}"))
+        st.markdown("\n".join(f"- **{k}:** {v}" for k, v in rows))
+        st.caption(f"Raw score: {score_text}")
 
 
 def render_crew_panel(crew: dict, changes: dict | None, out_crews: set) -> None:
     """The selected crew's jobs in priority order; each row selects that job."""
     moved = {m["id"] for m in (changes or {}).get("moved", [])}
+    jobs = sorted(crew["jobs"], key=lambda j: -j["P"])
     with st.container(border=True):
-        head, close = st.columns([5, 2], vertical_alignment="center")
-        r, g, b = CREW_COLORS[(crew["crew"] - 1) % len(CREW_COLORS)]
-        head.markdown(f"<span style='color:rgb({r},{g},{b});font-size:1.3em'>●</span> "
-                      f"**Crew {crew['crew']}**", unsafe_allow_html=True)
-        close.button("Clear crew", icon=":material/close:", type="tertiary", on_click=toggle_crew,
-                     args=(crew["crew"],), key="clear_crew")
-        jobs = sorted(crew["jobs"], key=lambda j: -j["P"])
+        st.markdown(f"{dot(crew['crew'], '1.4em')} **Crew {crew['crew']}** · {crew['zone']} zone",
+                    unsafe_allow_html=True)
         if not jobs:
-            st.caption(f"Zone {crew['zone']} · " + ("out today, no jobs" if crew["crew"] in out_crews else "no jobs"))
+            st.caption("Out today, no jobs." if crew["crew"] in out_crews else "No jobs.")
             return
-        st.caption(f"Zone {crew['zone']} · {len(jobs)} jobs · total P {sum(j['P'] for j in jobs):.2f} · "
-                   f"{sum(j['safety'] for j in jobs)} safety")
-        st.caption("Exact locations (lat, lon). The source data has no street addresses.")
+        st.caption(f"{len(jobs)} jobs · {sum(j['safety'] for j in jobs)} safety · priority out of 10 on the right")
         for rank, j in enumerate(jobs, 1):
             chosen = j["id"] == st.session_state.selected_job
-            st.button(f"{rank}. {j['type']} · {j['community'].title()} · P {j['P']:.2f}{_job_label(j, moved)}",
-                      key=f"crewjob_{j['id']}", type="secondary" if chosen else "tertiary",
-                      on_click=select_job, args=(None if chosen else j["id"],),
-                      help="Selected: click again to clear" if chosen else "Show details and find on map")
-            st.caption(f":material/location_on: {j['lat']:.5f}, {j['lon']:.5f} · ticket {j['id']}")
+            with st.container(horizontal=True, vertical_alignment="center", gap="small"):
+                st.button(f"{rank}. {j['type']} · {j['community'].title()}", key=f"crewjob_{j['id']}",
+                          type="secondary" if chosen else "tertiary",
+                          on_click=select_job, args=(j["id"], crew["crew"]))
+                job_badges(j, moved)
+                st.space("stretch")
+                st.markdown(f"**{p10(j['P']):.1f}**", width="content")
+
+
+def _tip(job: dict, crew: str, status: str) -> str:
+    safety = "<br/><b>Safety ticket</b>" if job["safety"] else ""
+    note = f" · {status}" if status else ""
+    return (f"<b>{job['type']}</b> · {job['community'].title()}<br/>"
+            f"Priority {p10(job['P']):.1f} / 10 · {crew}{note}{safety}<br/>Ticket {job['id']}")
 
 
 def map_layers(plan: dict, changes: dict | None, selected: dict | None = None,
                crew_id: int | None = None) -> list:
-    """Job markers coloured by crew; only that crew's markers when one is selected; ring on the selected job."""
+    """Job markers coloured by crew; other crews fade when one is selected; ring on the selected job."""
     sel_id = selected["id"] if selected else None
-
-    def shown(crew: int | None, job_id: str) -> bool:  # crew isolation; the selected job always stays visible
-        return crew_id is None or crew == crew_id or job_id == sel_id
-
     moved = {m["id"] for m in (changes or {}).get("moved", [])}
     added = set((changes or {}).get("added", []))
     points = []
     for c in plan["crews"]:
-        color = CREW_COLORS[(c["crew"] - 1) % len(CREW_COLORS)]
+        r, g, b = crew_rgb(c["crew"])
+        focus = crew_id is None or c["crew"] == crew_id
         for j in c["jobs"]:
-            if not shown(c["crew"], j["id"]):
-                continue
-            is_sel = j["id"] == sel_id
-            points.append({**j, "crew": c["crew"], "zone": c["zone"], "color": color,
-                           "radius": 13 if j["id"] in added else (
-                               (11 if is_sel else 7) if j["safety"] else (9 if is_sel else 4)),
+            status = "new today" if j["id"] in added else ("moved here" if j["id"] in moved else "")
+            big = j["safety"] or j["id"] == sel_id or j["id"] in added
+            points.append({**j, "crew": c["crew"], "color": [r, g, b, 230 if focus else 55],
+                           "radius": (8 if big else 5) if focus else 4,
                            "line": [255, 193, 7] if j["id"] in added else (
-                               [0, 0, 0] if j["id"] in moved else [255, 255, 255]),
-                           "status": "NEW urgent job" if j["id"] in added else (
-                               "moved here" if j["id"] in moved else ("safety" if j["safety"] else ""))})
-    dropped = [{**j, "crew": "-", "zone": "-", "color": [150, 150, 150],
-                "radius": 9 if j["id"] == sel_id else 4, "line": [90, 90, 90], "status": "deferred"}
-               for j in (changes or {}).get("dropped_jobs", []) if shown(None, j["id"])]
-    centroids = [{"crew": c["crew"], "zone": c["zone"], "lat": c["centroid"][0], "lon": c["centroid"][1],
-                  "label": f"Crew {c['crew']}", "color": CREW_COLORS[(c["crew"] - 1) % len(CREW_COLORS)]}
-                 for c in plan["crews"] if crew_id is None or c["crew"] == crew_id]
-    common = dict(get_position="[lon, lat]", pickable=True)
+                               [30, 30, 30] if j["id"] in moved else [255, 255, 255]),
+                           "line_w": 2 if focus else 0,
+                           "tip": _tip(j, f"crew {c['crew']} ({c['zone']})", status)})
+    dropped = [{**j, "crew": None, "color": [150, 150, 150, 200 if crew_id is None else 55],
+                "radius": 5, "line": [90, 90, 90], "line_w": 1, "tip": _tip(j, "deferred to tomorrow", "")}
+               for j in (changes or {}).get("dropped_jobs", [])]
+    labels = [{"crew": c["crew"], "lat": c["centroid"][0], "lon": c["centroid"][1], "label": f"Crew {c['crew']}",
+               "color": crew_rgb(c["crew"]) + [255 if crew_id in (None, c["crew"]) else 70],
+               "tip": f"<b>Crew {c['crew']}</b> · {c['zone']} zone<br/>Click to show this crew"}
+              for c in plan["crews"]]
     layers = [
-        pdk.Layer("ScatterplotLayer", points + dropped, get_fill_color="color", get_radius="radius", radius_units="'pixels'",
-                  get_line_color="line", stroked=True, line_width_min_pixels=2, opacity=0.85, **common),
-        pdk.Layer("TextLayer", centroids, get_text="label", get_color="color", get_size=14,
-                  get_alignment_baseline="'bottom'", font_weight=700, **common),
+        pdk.Layer("ScatterplotLayer", dropped + points, id="jobs", get_position="[lon, lat]", pickable=True,
+                  get_fill_color="color", get_radius="radius", radius_units="'pixels'", stroked=True,
+                  get_line_color="line", get_line_width="line_w", line_width_units="'pixels'"),
+        pdk.Layer("TextLayer", labels, id="crews", get_position="[lon, lat]", pickable=True, get_text="label",
+                  get_color="color", get_size=14, get_alignment_baseline="'bottom'", font_weight=700),
     ]
-    if selected:  # ring around the selected job, drawn on top; all other markers stay
-        layers.append(pdk.Layer("ScatterplotLayer", [selected], get_position="[lon, lat]", get_radius=18,
-                                radius_units="'pixels'", filled=False, stroked=True,
+    if selected:  # ring around the selected job, drawn on top
+        layers.append(pdk.Layer("ScatterplotLayer", [selected], id="ring", get_position="[lon, lat]",
+                                get_radius=15, radius_units="'pixels'", filled=False, stroked=True,
                                 get_line_color=[20, 20, 20], line_width_units="'pixels'", get_line_width=3))
     return layers
 
@@ -354,7 +405,7 @@ def map_layers(plan: dict, changes: dict | None, selected: dict | None = None,
 def crew_view_state(crew: dict) -> pdk.ViewState:
     """Fit the map to one crew's jobs (zoom capped so a tight cluster isn't street level)."""
     view = pdk.data_utils.compute_view([[j["lon"], j["lat"]] for j in crew["jobs"]], view_proportion=1)
-    return pdk.ViewState(latitude=view.latitude, longitude=view.longitude, zoom=min(view.zoom, 13.5))
+    return pdk.ViewState(latitude=view.latitude, longitude=view.longitude, zoom=min(view.zoom, 13.0))
 
 
 @st.cache_data
@@ -373,163 +424,152 @@ def pick_grid() -> list:
 
 def render_map(plan: dict, changes: dict | None = None, selected: dict | None = None,
                crew: dict | None = None, tag: str = "", pick: bool = False):
-    """Draw the map. In pick mode, returns (lat, lon) of the point the supervisor clicked, else None."""
-    if selected:
-        view_state = pdk.ViewState(latitude=selected["lat"], longitude=selected["lon"], zoom=14.5)
-    elif crew and crew["jobs"]:
+    """Draw the map.
+
+    Pick mode returns (lat, lon) of the clicked spot. Normal mode returns ("job", id, crew) or
+    ("crew", n) when a marker or crew label was clicked, else None.
+    """
+    if crew and crew["jobs"]:
         view_state = crew_view_state(crew)
+    elif selected:
+        view_state = pdk.ViewState(latitude=selected["lat"], longitude=selected["lon"], zoom=13)
     else:
-        view_state = pdk.ViewState(latitude=51.04, longitude=-114.08, zoom=9.6)
+        view_state = pdk.ViewState(latitude=51.03, longitude=-114.07, zoom=10.1)
     layers = map_layers(plan, changes, selected, crew["crew"] if crew else None)
+    alt = "Map of Calgary showing today's jobs, coloured by crew"
     if pick:  # nearly transparent dots to click on; the job markers stay visible underneath
         layers.append(pdk.Layer("ScatterplotLayer", pick_grid(), id="pick_grid", pickable=True,
                                 get_position="[lon, lat]", get_radius=240, radius_units="'meters'",
                                 get_fill_color=[255, 193, 7, 40], auto_highlight=True,
                                 highlight_color=[255, 193, 7, 200]))
-    deck = pdk.Deck(
-        layers=layers,
-        initial_view_state=view_state,
-        map_provider="carto", map_style="light",
-        tooltip=(None if pick else
-                 {"text": "{type} - {community}\nP {P} | crew {crew} ({zone}) {status}\nticket {id}"}),
-    )
-    # a new key per selection or plan remounts the map so it redraws and moves to the new view state
-    key = f"map_{tag}_{selected['id'] if selected else ''}_{crew['crew'] if crew else ''}"
-    alt = "Map of Calgary showing today's jobs, coloured by crew"
-    if pick:
+        deck = pdk.Deck(layers=layers, initial_view_state=view_state, map_provider="carto", map_style="light")
         event = st.pydeck_chart(deck, key=f"pick_{tag}", alt=alt, on_select="rerun",
                                 selection_mode="single-object")
         hit = (event.selection.objects.get("pick_grid") or []) if event else []
         st.caption("Click anywhere on the map to place the job (it snaps to the nearest point, within about 300 m).")
         return (hit[0]["lat"], hit[0]["lon"]) if hit else None
-    st.pydeck_chart(deck, key=key, alt=alt)
-    st.caption("Colour = crew. Large dots = safety tickets. Black outline = moved. Yellow outline = new urgent job. "
-               "Grey = deferred.")
+
+    deck = pdk.Deck(layers=layers, initial_view_state=view_state, map_provider="carto", map_style="light",
+                    tooltip={"html": "{tip}", "style": {"fontSize": "12px"}})
+    # a new key per selection or plan remounts the map so it moves to the new view state
+    key = f"map_{tag}_{selected['id'] if selected else ''}_{crew['crew'] if crew else ''}"
+    event = st.pydeck_chart(deck, key=key, alt=alt, on_select="rerun", selection_mode="single-object")
+    st.caption("Click a job or a crew name. Colour = crew · large dot = safety ticket · dark outline = moved · "
+               "yellow outline = new today · grey = deferred.")
+    objects = event.selection.objects if event else {}
+    job_hit, crew_hit = objects.get("jobs") or [], objects.get("crews") or []
+    if job_hit and job_hit[0].get("id") != st.session_state.selected_job:
+        return ("job", job_hit[0]["id"], job_hit[0].get("crew"))
+    if crew_hit and crew_hit[0].get("crew") != st.session_state.selected_crew:
+        return ("crew", crew_hit[0]["crew"])
     return None
 
 
-OURS_COLOR = "rgb(44,160,44)"  # crew-palette green; readable on light and dark themes
-BOX = "border:1px solid rgba(128,128,128,.35);border-radius:.6rem;padding:.7rem 1rem;height:100%"
+# --- results ----------------------------------------------------------------
+
+BOX = "border:1px solid rgba(128,128,128,.35);border-radius:.6rem;padding:.8rem 1rem;height:100%"
 
 
-def _compare_html(title: str, ours: str, theirs: str, note: str, size: float) -> str:
-    """Two big numbers side by side: our agent (green) vs oldest-first (muted)."""
-    return (
-        f"<div style='{BOX}'>"
-        f"<div style='font-size:.95rem;font-weight:600;opacity:.8'>{title}</div>"
-        f"<div style='display:flex;align-items:baseline;gap:.7rem;flex-wrap:wrap;margin:.2rem 0'>"
-        f"<span style='font-size:{size}rem;font-weight:800;line-height:1.05;color:{OURS_COLOR}'>{ours}</span>"
-        f"<span style='font-size:{size * .4:.2f}rem;opacity:.6'>vs</span>"
-        f"<span style='font-size:{size}rem;font-weight:800;line-height:1.05;opacity:.45'>{theirs}</span></div>"
-        f"<div style='font-size:.8rem;opacity:.7'>{note}</div></div>"
-    )
+def _stage_html(label: str, big: str, of: str, line: str, color: str) -> str:
+    return (f"<div style='{BOX}'>"
+            f"<div style='font-size:.8rem;font-weight:700;letter-spacing:.05em;opacity:.75'>{label}</div>"
+            f"<div style='display:flex;align-items:baseline;gap:.4rem;margin:.2rem 0'>"
+            f"<span style='font-size:2.8rem;font-weight:800;line-height:1;color:{color}'>{big}</span>"
+            f"<span style='font-size:1.1rem;opacity:.7'>{of}</span></div>"
+            f"<div style='font-size:.85rem;opacity:.85'>{line}</div></div>")
 
 
-def _count_html(title: str, value: str | None, note: str) -> str:
-    """Small card; greyed 'awaiting crew update' when there is no value yet."""
-    if value is None:
-        return (f"<div style='{BOX};opacity:.45'><div style='font-size:.95rem;font-weight:600'>{title}</div>"
-                f"<div style='font-size:1rem;font-style:italic;margin-top:.5rem'>awaiting crew update</div></div>")
-    return (f"<div style='{BOX}'><div style='font-size:.95rem;font-weight:600;opacity:.8'>{title}</div>"
-            f"<div style='font-size:2.2rem;font-weight:700;line-height:1.1'>{value}</div>"
-            f"<div style='font-size:.8rem;opacity:.7'>{note}</div></div>")
-
-
-def render_metrics(view: str, m: dict, fifo: dict, base: dict, n_updates: int = 0) -> None:
-    ours = base if view == "FIFO" else m  # the comparison always shows our plan vs oldest-first
-    who = (f"our plan after {n_updates} update{'s' if n_updates != 1 else ''}"
-           if view == "Agent - noon" else "our agent, 8 a.m.")
-    c1, c2, c3, c4 = st.columns([2.2, 1.4, 1, 1])
-    c1.markdown(_compare_html("Safety hazards covered — our agent vs oldest-first",
-                              str(ours["safety"]), str(fifo["safety"]),
-                              f"{who} · oldest-first (FIFO), all crews", 4.2), unsafe_allow_html=True)
-    c2.markdown(_compare_html("Priority served (total P)", f"{ours['P']:.1f}", f"{fifo['P']:.1f}",
-                              "our agent vs oldest-first", 2.2), unsafe_allow_html=True)
-    if view == "Agent - noon":
-        c3.markdown(_count_html("Jobs moved", str(m.get("moved", 0)),
-                                f"to a nearby crew · {m.get('added', 0)} new today"), unsafe_allow_html=True)
-        c4.markdown(_count_html("Jobs deferred", str(m.get("dropped", 0)),
-                                f"{m.get('safety_dropped', 0)} of them safety tickets"), unsafe_allow_html=True)
-    else:
-        c3.markdown(_count_html("Jobs moved", None, ""), unsafe_allow_html=True)
-        c4.markdown(_count_html("Jobs deferred", None, ""), unsafe_allow_html=True)
-    if view == "Agent - noon" and m.get("added"):
-        st.caption(f"Our count includes {m['added']} job{'s' if m['added'] != 1 else ''} reported after 8 a.m.; "
-                   "the oldest-first baseline is the 8 a.m. list and never saw them.")
-    st.caption("**Priority score P** = hazard type (0–3) + 0.25 per day waiting + 0.5 per extra report. "
-               "Higher = more urgent.")
-    st.caption("**Robustness:** we re-ran the plan with every type weight changed by ±1 — 16 variations. "
-               "Our agent covered more safety tickets than oldest-first in all 16, by between +9 and +15.")
-
-
-def _stage_html(row: dict, tone: str) -> str:
-    """One card of the improvement panel: safety tickets covered, then jobs and total P."""
-    m = row["m"]
-    title = (f"<div style='font-size:.8rem;font-weight:700;letter-spacing:.06em'>{row['stage']}"
-             f"<span style='font-weight:400;opacity:.7'> · {row['what']}</span></div>")
-    if m is None:
-        return (f"<div style='{BOX};opacity:.45'>{title}"
-                f"<div style='font-size:1rem;font-style:italic;margin-top:.5rem'>run python -m dispatch.run</div></div>")
-    extra = (f"{m['moved']} moved · {m['deferred']} deferred · {m['safety_dropped']} safety dropped"
-             if "moved" in m else "&nbsp;")
-    return (f"<div style='{BOX}'>{title}"
-            f"<div style='display:flex;align-items:baseline;gap:.5rem;margin:.15rem 0'>"
-            f"<span style='font-size:2.6rem;font-weight:800;line-height:1.05;{tone}'>{m['safety']}</span>"
-            f"<span style='font-size:.85rem;opacity:.7'>safety tickets covered</span></div>"
-            f"<div style='font-size:.8rem;opacity:.8'>{m['jobs']} jobs · total P {m['P']:.2f}</div>"
-            f"<div style='font-size:.8rem;opacity:.8'>{extra}</div></div>")
-
-
-def render_improvement(metrics: dict) -> None:
-    """Baseline, first result and improved result side by side, always on screen (no clicking)."""
-    if improvement is None:
+def render_results(metrics: dict) -> None:
+    """The improvement story in one place: FIFO -> our 8 a.m. plan -> after a crew drops out."""
+    fifo, am, noon = metrics.get("fifo"), metrics.get("8am"), metrics.get("noon")
+    event = load_event() or {"crew": 4}
+    st.subheader("Results")
+    c1, c2, c3 = st.columns(3)
+    c1.markdown(_stage_html("OLDEST-FIRST (FIFO)", str(fifo["safety"]), f"of {fifo['n']}",
+                            "jobs are safety tickets: today's baseline", FIFO_COLOR), unsafe_allow_html=True)
+    c2.markdown(_stage_html("OUR 8 A.M. PLAN", str(am["safety"]), f"of {am['n']}",
+                            f"jobs are safety tickets: <b>+{am['safety'] - fifo['safety']}</b> with the same crews",
+                            OURS_COLOR), unsafe_allow_html=True)
+    if not noon:
+        c3.markdown(_stage_html(f"CREW {event['crew']} OUT", "–", "", "run python -m dispatch.run", FIFO_COLOR),
+                    unsafe_allow_html=True)
         return
-    try:
-        event = json.loads((OUT / "event.json").read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        event = None
-    try:
-        rows = improvement.comparison_rows(metrics, event)
-        summary = improvement.summary_line(rows, event)
-    except Exception:  # unexpected metrics shape: hide the panel rather than break the page
-        return
-    st.markdown("**Improvement round:** baseline → first result → improved result "
-                "(safety tickets covered, 8 crews × 5 jobs)")
-    tones = {"fifo": "opacity:.45", "8am": f"color:{OURS_COLOR}", "noon": f"color:{OURS_COLOR}"}
-    for col, row in zip(st.columns(3), rows):
-        col.markdown(_stage_html(row, tones[row["key"]]), unsafe_allow_html=True)
-    st.caption(summary)
+    held = "held at" if noon["safety"] >= am["safety"] else "now"
+    c3.markdown(_stage_html(f"AFTER CREW {event['crew']} CALLS IN SICK", str(noon["n"]), "jobs done",
+                            f"safety coverage {held} <b>{noon['safety']}</b>; only lower-priority work deferred"
+                            if noon.get("safety_dropped", 0) == 0 else
+                            f"safety coverage {held} <b>{noon['safety']}</b>",
+                            OURS_COLOR), unsafe_allow_html=True)
+
+    dropped = (metrics.get("changes") or {}).get("dropped_jobs", [])
+    top_deferred = max((p10(j["P"]) for j in dropped), default=None)
+    share = noon["P"] / am["P"] if am["P"] else 0
+    st.write("")
+    k1, k2, k3, k4 = st.columns(4)
+    k1.metric("Jobs moved", noon.get("moved", 0), border=True,
+              help=f"Crew {event['crew']}'s jobs handed to one of the 3 nearest crews")
+    k2.metric("Jobs deferred", noon.get("dropped", 0), border=True,
+              help="Pushed to tomorrow" + (f"; the most urgent scored {top_deferred:.1f}/10" if dropped else ""))
+    k3.metric("Safety tickets dropped", noon.get("safety_dropped", 0), border=True)
+    k4.metric("Priority served", f"{share:.0%}", border=True,
+              help=f"Total P {noon['P']:.2f} of the 8 a.m. plan's {am['P']:.2f}")
+    lost = (1 - noon["n"] / am["n"]) if am["n"] else 0
+    kept = "and every safety ticket" if noon.get("safety_dropped", 0) == 0 else \
+        f"but dropped {noon['safety_dropped']} safety ticket(s)"
+    st.caption(f"The crew update removed {lost * 100:.3g}% of today's job slots; the replan still served "
+               f"{share:.0%} of the 8 a.m. priority, {kept}.")
 
 
-def render_crews(plan: dict, changes: dict | None, out_crews: set, slots: dict | None = None) -> None:
-    moved = {m["id"] for m in (changes or {}).get("moved", [])}
-    cols = st.columns(4)
-    for i, c in enumerate(plan["crews"]):
-        with cols[i % 4].container(border=True):
-            r, g, b = CREW_COLORS[(c["crew"] - 1) % len(CREW_COLORS)]
+def render_how_it_works(metrics: dict) -> None:
+    """Scoring, robustness and raw numbers, tucked away."""
+    with st.expander("How the numbers are computed"):
+        if hasattr(scoring, "FORMULA"):
+            st.markdown(f"**Priority score.** `{scoring.FORMULA}`. {getattr(scoring, 'SCALE_NOTE', '')}")
+        st.markdown("**Safety tickets** are potholes and missing or damaged signs (type weight 3).")
+        st.markdown("**Robustness.** We re-ran the plan with every type weight changed by ±1 (16 variations). "
+                    "Our agent covered more safety tickets than oldest-first in all 16, by +9 to +15.")
+        if improvement:
+            try:
+                rows = improvement.comparison_rows(metrics, load_event())
+                st.dataframe([{"Stage": f"{r['stage']} · {r['what']}", "Jobs": r["m"]["jobs"],
+                               "Safety covered": r["m"]["safety"], "Total P": r["m"]["P"],
+                               "Moved": r["m"].get("moved"), "Deferred": r["m"].get("deferred"),
+                               "Safety dropped": r["m"].get("safety_dropped")}
+                              for r in rows if r["m"]], hide_index=True)
+            except Exception:
+                pass
+
+
+def render_live_strip(m: dict, fifo: dict, n_updates: int) -> None:
+    """Numbers for the plan after the supervisor's own updates today."""
+    a, b, c, d = st.columns(4)
+    a.metric("Safety tickets covered", m["safety"], f"{m['safety'] - fifo['safety']:+d} vs oldest-first")
+    b.metric("Jobs moved", m.get("moved", 0))
+    c.metric("Jobs deferred", m.get("dropped", 0))
+    d.metric("Safety tickets dropped", m.get("safety_dropped", 0))
+    note = f"After {n_updates} update{'s' if n_updates != 1 else ''} today."
+    if m.get("added"):
+        note += (f" Includes {m['added']} job{'s' if m['added'] != 1 else ''} reported after 8 a.m., "
+                 "which oldest-first never saw.")
+    st.caption(note)
+
+
+def render_crew_list(plan: dict, out_crews: set) -> None:
+    """Crew titles only: colour dot, Crew N, zone. Clicking one switches to it."""
+    with st.container(horizontal=True, vertical_alignment="center"):
+        st.markdown("**Crews**")
+        st.space("stretch")
+        if st.session_state.selected_crew:
+            st.button("Show all crews", icon=":material/zoom_out_map:", type="tertiary", on_click=show_all,
+                      key="show_all")
+    with st.container(border=True, gap=None):
+        for c in plan["crews"]:
             is_sel = c["crew"] == st.session_state.selected_crew
             with st.container(horizontal=True, vertical_alignment="center", gap="small"):
-                st.markdown(f"<span style='color:rgb({r},{g},{b});font-size:1.3em'>●</span>",
-                            unsafe_allow_html=True, width="content")
-                st.button(f"**Crew {c['crew']}** · {c['zone']}", key=f"crew_{c['crew']}",
-                          type="secondary" if is_sel else "tertiary", on_click=toggle_crew, args=(c["crew"],),
-                          icon=":material/filter_center_focus:" if is_sel else None,
-                          help="Selected: click again to show the whole city" if is_sel
-                          else "Focus the map on this crew")
-            if not c["jobs"]:
-                st.caption("Out today" if c["crew"] in out_crews else "No jobs")
-                continue
-            safety = sum(j["safety"] for j in c["jobs"])
-            cap_note = f" · limit {slots[c['crew']]}" if slots and slots.get(c["crew"], 5) < 5 else ""
-            st.caption(f"{len(c['jobs'])} jobs · {safety} safety · P {sum(j['P'] for j in c['jobs']):.1f}{cap_note}")
-            for j in sorted(c["jobs"], key=lambda j: -j["P"]):
-                tags = _job_label(j, moved)
-                chosen = j["id"] == st.session_state.selected_job
-                st.button(f"{j['type']} · {j['community'].title()} · P {j['P']:.2f}{tags}",
-                          key=f"job_{j['id']}", type="secondary" if chosen else "tertiary",
-                          icon=":material/my_location:" if chosen else None,
-                          on_click=select_job, args=(None if chosen else j["id"],),
-                          help="Selected: click again to clear" if chosen else "Show details and find on map")
+                st.markdown(dot(c["crew"]), unsafe_allow_html=True, width="content")
+                label = f"**Crew {c['crew']}** · {c['zone']}" + (" · out today" if c["crew"] in out_crews else "")
+                st.button(label, key=f"crew_{c['crew']}", type="secondary" if is_sel else "tertiary",
+                          on_click=select_crew, args=(c["crew"],))
 
 
 # --- page ------------------------------------------------------------------
@@ -660,18 +700,23 @@ if ss.locating:  # find the address (can take a few seconds), else ask for a cli
 
 
 st.title("Who should 311 send next?")
-st.caption("Calgary Roads · 8 crews × 5 jobs · priority agent vs oldest-first (FIFO) · "
-           "frozen sample of 200 Open Calgary 311 tickets (Aug 25–27, 2026), planned for Aug 28, 2026")
+st.caption("Calgary Roads · 8 crews × 5 jobs · 200 Open Calgary 311 tickets (Aug 25–27, 2026), planned for Aug 28")
 if data["fake"]:
     st.warning("Showing sample data: run `python -m dispatch.run` to generate dispatch/outputs/.")
 
-render_improvement(metrics)
+render_results(metrics)
+render_how_it_works(metrics)
+st.divider()
 
+# --- today's plan: map, crews, updates ---
+
+st.subheader("Today's plan")
 views = ["Agent", "FIFO"] + (["Agent - noon"] if ss.noon and "plan" in ss.noon else [])
 if ss.get("view") not in views:
     ss.view = views[-1] if ss.noon and "plan" in ss.noon else "Agent"
-view = st.radio("Plan shown", views, horizontal=True, key="view",
-                captions=["8 a.m. priority plan", "oldest-first baseline", "after today's updates"][:len(views)])
+view = st.radio("Plan shown", views, horizontal=True, key="view", label_visibility="collapsed",
+                format_func={"Agent": "Our 8 a.m. plan", "FIFO": "Oldest-first baseline",
+                             "Agent - noon": "After today's updates"}.get)
 
 out_crews, slots = set(), None
 if view == "FIFO":
@@ -683,12 +728,13 @@ else:
     slots = ss.noon["slots"]
     out_crews = {c for c, n in slots.items() if n == 0}
 
-render_metrics(view, m, metrics["fifo"], metrics["8am"], len(ss.log))
+if view == "Agent - noon":
+    render_live_strip(m, metrics["fifo"], len(ss.log))
 
 sel_job, sel_job_crew = find_job(plan, changes, ss.selected_job)
 sel_crew = find_crew(plan, ss.selected_crew)
 
-left, right = st.columns([3, 2])
+left, right = st.columns([3, 1.3], gap="large")
 with left:
     if ss.pending:  # a new job the message couldn't place: the supervisor clicks where it is
         pend_job = ss.pending["event"]["job"]
@@ -703,23 +749,32 @@ with left:
             st.rerun()
     else:
         ev_tag = ss.noon["event"] if ss.noon and "event" in ss.noon else {}
-        render_map(plan, changes, sel_job, sel_crew,
-                   tag=f"{view}_{len(ss.log)}_{ev_tag.get('event')}_{ev_tag.get('crew')}_{ev_tag.get('capacity')}")
-with right:
-    if ss.selected_job:
-        st.subheader("Selected job")
-        render_job_detail(sel_job, sel_job_crew, view)
-        if sel_crew:
-            st.caption(f"Clear the job to go back to crew {sel_crew['crew']}'s list.")
+        hit = render_map(plan, changes, sel_job, sel_crew,
+                         tag=f"{view}_{len(ss.log)}_{ev_tag.get('event')}_{ev_tag.get('crew')}_{ev_tag.get('capacity')}")
+        if hit:  # a click on the map selects that job (and its crew) or that crew
+            if hit[0] == "job":
+                select_job(hit[1], hit[2])
+            else:
+                select_crew(hit[1])
+            st.rerun()
+
+    # under the map: the selected crew and job, or the briefing when nothing is selected
+    if sel_crew and ss.selected_job:
+        c_list, c_job = st.columns([1, 1])
+        with c_list:
+            render_crew_panel(sel_crew, changes, out_crews)
+        with c_job:
+            render_job_detail(sel_job, sel_job_crew, view)
     elif sel_crew:
-        st.subheader("Selected crew")
         render_crew_panel(sel_crew, changes, out_crews)
+    elif ss.selected_job:
+        render_job_detail(sel_job, sel_job_crew, view)
     else:
-        st.subheader("Briefing")
         with st.container(border=True):
+            st.markdown("**Supervisor briefing**")
             if view == "FIFO":
                 st.write(f"Baseline: oldest tickets first, same crews and zones. It covers {m['safety']} safety "
-                         f"tickets, versus {metrics['8am']['safety']} in the agent's plan.")
+                         f"tickets, versus {metrics['8am']['safety']} in our plan.")
             else:
                 if view == "Agent":
                     text, src = cached_briefing("8am", data["plan_8am"], metrics, "8am")
@@ -729,67 +784,71 @@ with right:
                     text, src = cached_briefing(f"noon:{digest}", plan, ss.noon["metrics"], "noon", changes, event=ev)
                 st.write(text)
                 st.caption(SOURCE_NOTES[src])
-        st.caption(":material/touch_app: Click a crew name or a job below to focus the map on it.")
 
-    st.subheader("Report an update")
-    st.caption("Crew changes and new urgent jobs both work. Every update builds on the last one.")
+with right:
+    render_crew_list(plan, out_crews)
+    st.write("")
 
+    with st.container(horizontal=True, vertical_alignment="center"):
+        st.markdown("**Report an update**")
+        st.space("stretch")
+        if claude_ready():
+            st.badge("Claude", icon=":material/auto_awesome:", color="green",
+                     help="An API key is set: Claude reads updates, with the rule-based parser as backup.")
+        else:
+            st.badge("Rule-based", icon=":material/rule:", color="gray",
+                     help="No ANTHROPIC_API_KEY on this machine: the rule-based parser reads updates.")
     with st.form("crew_update", clear_on_submit=True, border=False):
-        st.text_area("Update", key="update_text", height=90, label_visibility="collapsed",
-                     placeholder="Crew change or new job, e.g. crew 4 called in sick, or: "
-                                 "sinkhole at 8 Ave SW and 4 St SW blocking traffic")
-        st.form_submit_button("Submit update", type="primary", icon=":material/send:", on_click=_submit)
-    with st.expander("Try an example", expanded=False):
+        st.text_area("Update", key="update_text", height=80, label_visibility="collapsed",
+                     placeholder="e.g. crew 4 called in sick, or: sinkhole at 8 Ave SW and 4 St SW")
+        st.form_submit_button("Submit update", type="primary", icon=":material/send:", on_click=_submit,
+                              width="stretch")
+    with st.expander("Examples"):
         for text in QUICK_FILLS:
             st.button(text, type="tertiary", on_click=_run, args=(text,), key=f"example_{text}")
 
     if ss.get("applied"):
         ev, got = ss.applied["event"], ss.applied["received"]
-        how = {"claude": ":material/auto_awesome: Read by Claude", "manual": ":material/edit: Entered by hand"}.get(
-            ev.get("source"), ":material/rule: Read by the rule-based parser"
-            + (" (Claude unavailable: no API key or no connection)" if str(ev.get("why", "")).startswith("fallback")
-               else " (no Claude call needed)"))
         with st.container(border=True):
             st.markdown(f":material/check_circle: **{'No change.' if ss.applied.get('noop') else 'Replanned.'}** "
                         f"{describe(ev)}")
             if ss.applied.get("effect"):
                 st.markdown(ss.applied["effect"])
             if got:
-                st.caption(f"\u201c{got}\u201d")
-            st.caption(how)
+                st.caption(f"“{got}”")
+            st.caption(read_by(ev))
             if ev.get("event") == "new_job":
                 job = ev["job"]
                 where = job.get("resolved") or job.get("address") or ""
                 st.caption(f":material/location_on: Located by {job.get('location_source', 'map click')}"
-                           + (f": {where}" if where else "") + f" · severity {job['severity']} of 3 (3 = emergency)")
-            with st.expander("Parsed result (JSON)", expanded=False):
+                           + (f": {where}" if where else "") + f" · severity {job['severity']} of 3")
+            with st.expander("Parsed result (JSON)"):
                 st.json({k: v for k, v in ev.items() if k not in ("source", "why")})
 
     if ss.get("parse_error") and not ss.parsed:
         with st.container(border=True):
             st.error("Couldn't read that update automatically. Pick the crew and what happened:")
             st.caption(ss.parse_error)
-            m_crew, m_kind = st.columns(2)
-            crew = m_crew.selectbox("Crew", range(1, 9), index=3)
-            kind = m_kind.radio("Status", ["Out for the day", "Short-handed (50%)"])
-            st.button("Use this update", on_click=_manual, args=(crew, "crew_out" if kind.startswith("Out") else "crew_partial"))
+            crew = st.selectbox("Crew", range(1, 9), index=3)
+            kind = st.radio("Status", ["Out for the day", "Short-handed (50%)"])
+            st.button("Use this update", on_click=_manual,
+                      args=(crew, "crew_out" if kind.startswith("Out") else "crew_partial"))
 
     if ss.parsed:  # only reached for an ambiguous message
         event = ss.parsed
         with st.container(border=True):
             st.markdown("**:material/help: One detail needed**")
-            st.code(ss.get("received", ""), language=None, wrap_lines=True)
-            st.info(f"**{event.get('question') or 'Which crew is affected?'}**", icon=":material/help:")
+            st.caption(f"“{ss.get('received', '')}”")
+            st.markdown(f"**{event.get('question') or 'Which crew is affected?'}**")
             picks = event.get("candidates") or []
             if picks:  # several crews named: one click picks the one to replan
                 for col, n in zip(st.columns(len(picks)), picks):
                     col.button(f"Crew {n}", key=f"pick_{n}", on_click=_run, args=(ss.received, n), width="stretch")
             elif event.get("crew"):  # crew known, status unknown
-                b_out, b_part = st.columns(2)
-                b_out.button("Out for the day", key="manual_out", icon=":material/person_off:", width="stretch",
-                             on_click=_manual, args=(event["crew"], "crew_out"))
-                b_part.button("Short-handed (50%)", key="manual_part", icon=":material/group_remove:", width="stretch",
-                              on_click=_manual, args=(event["crew"], "crew_partial"))
+                st.button("Out for the day", key="manual_out", icon=":material/person_off:", width="stretch",
+                          on_click=_manual, args=(event["crew"], "crew_out"))
+                st.button("Short-handed (50%)", key="manual_part", icon=":material/group_remove:", width="stretch",
+                          on_click=_manual, args=(event["crew"], "crew_partial"))
             else:
                 st.text_input("Your answer", key="followup", placeholder="e.g. crew 4, or: pothole at 5 Ave SW",
                               on_change=_answer)
@@ -801,13 +860,5 @@ with right:
         with st.container(border=True):
             st.markdown(f"**Today's updates ({len(ss.log)})**")
             st.markdown("\n".join(f"{i}. {day_live.describe_event(e)}" for i, e in enumerate(ss.log, 1)))
-            b_undo, b_reset = st.columns(2)
-            b_undo.button("Undo last update", icon=":material/undo:", on_click=_undo, width="stretch")
-            b_reset.button("Reset to 8 a.m. plan", icon=":material/restart_alt:", on_click=_reset, width="stretch")
-
-st.subheader("Crews")
-st.caption("⚠️ = safety ticket (potholes, missing or damaged signs, urgent reports). ↪ moved = reassigned today. "
-           "★ new = reported after 8 a.m.")
-st.caption("Each crew works its own area of the city, so a crew's mix of jobs reflects what was reported "
-           "there today. That's why some crews carry more safety tickets than others.")
-render_crews(plan, changes, out_crews, slots)
+            st.button("Undo last update", icon=":material/undo:", on_click=_undo, width="stretch")
+            st.button("Reset to 8 a.m. plan", icon=":material/restart_alt:", on_click=_reset, width="stretch")

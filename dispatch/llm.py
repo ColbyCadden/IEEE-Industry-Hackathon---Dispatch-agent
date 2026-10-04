@@ -582,7 +582,8 @@ def llm_briefing(plan: dict, metrics: dict, when: str = "8am", changes: dict | N
             task = ("This is the 8 a.m. briefing. Say what the crews are doing today, and state how many "
                     "safety tickets the plan covers versus working oldest-first.")
         else:
-            task = ("This is the noon replan briefing. Say what happened, how many jobs moved to other crews, "
+            task = ("This is an update briefing, sent right after the plan changed. Say what happened, how many "
+                    "jobs moved to other crews, "
                     "how many were deferred, and say explicitly whether any safety tickets were dropped. If "
                     "several updates came in during the day, focus on the latest one and the cumulative totals.")
         user = f"{task}\n\nData:\n{json.dumps(facts, indent=1)}"
@@ -602,6 +603,84 @@ def briefing(plan: dict, metrics: dict, when: str = "8am", changes: dict | None 
         return llm_briefing(plan, metrics, when, changes, event)
     last_source["briefing"] = "fallback: USE_LLM is off"
     return template_briefing(plan, metrics, when, changes, event)
+
+
+# --- end-of-day overview -----------------------------------------------------------
+
+def _day_facts(metrics: dict, updates: list[dict]) -> dict:
+    """The day in numbers. metrics = {"8am", "fifo", "noon"?, "changes"?}; updates = [{"time", "what", "effect"}]."""
+    am, fifo = metrics["8am"], metrics.get("fifo")
+    end = metrics.get("noon") or am
+    dropped = (metrics.get("changes") or {}).get("dropped_jobs", [])
+    types: dict[str, int] = {}
+    for j in dropped:
+        types[j["type"]] = types.get(j["type"], 0) + 1
+    return {
+        "updates_today_in_order": [f"{u['time']}: {u['what']}" + (f" ({u['effect']})" if u.get("effect") else "")
+                                   for u in updates],
+        "morning_plan": {"jobs": am["n"], "safety_tickets": am["safety"]},
+        "end_of_day_plan": {"jobs": end["n"], "safety_tickets": end["safety"]},
+        "safety_tickets_oldest_first_dispatch_would_have_covered": fifo["safety"] if fifo else None,
+        "jobs_moved_between_crews": end.get("moved", 0),
+        "jobs_deferred_to_tomorrow": end.get("dropped", 0),
+        "safety_tickets_deferred": end.get("safety_dropped", 0),
+        "new_jobs_added_today": end.get("added", 0),
+        "deferred_job_types": types,
+        "priority_served_percent_of_morning_plan": round(100 * end["P"] / am["P"]) if am["P"] else None,
+    }
+
+
+def template_day_overview(metrics: dict, updates: list[dict]) -> str:
+    """End-of-day overview built from the numbers, no LLM."""
+    f = _day_facts(metrics, updates)
+    am, end = f["morning_plan"], f["end_of_day_plan"]
+    lines = [f"End of day: the morning plan sent crews to {_plural(am['jobs'], 'job')}, "
+             f"{am['safety_tickets']} of them safety tickets."]
+    if not updates:
+        lines.append("There were no crew changes or new reports today, so the plan ran as dispatched.")
+    else:
+        lines.append(f"{_plural(len(updates), 'update')} came in during the day; the final plan covers "
+                     f"{_plural(end['jobs'], 'job')} with {end['safety_tickets']} safety tickets.")
+        lines.append(f"{_plural(f['jobs_moved_between_crews'], 'job')} moved between crews, "
+                     f"{f['new_jobs_added_today']} new {'job was' if f['new_jobs_added_today'] == 1 else 'jobs were'} "
+                     f"added, and {_plural(f['jobs_deferred_to_tomorrow'], 'job')} carry over to tomorrow.")
+        lines.append("No safety tickets were deferred." if f["safety_tickets_deferred"] == 0 else
+                     f"{_plural(f['safety_tickets_deferred'], 'safety ticket')} carry over to tomorrow; schedule "
+                     f"{'it' if f['safety_tickets_deferred'] == 1 else 'them'} first.")
+    if f["safety_tickets_oldest_first_dispatch_would_have_covered"] is not None:
+        lines.append(f"Oldest-first dispatch would have covered {f['safety_tickets_oldest_first_dispatch_would_have_covered']} safety tickets "
+                     f"with every crew working.")
+    return " ".join(lines)
+
+
+_OVERVIEW_SYSTEM = (
+    "You write the end-of-day overview for a City of Calgary Roads supervisor: a short spoken recap of "
+    "the whole day. Write at most 6 short, plain sentences, under 120 words in total: no markdown, no bullet "
+    "points, no headers. Cover how the morning plan started, what changed during the day in order, how "
+    "the day ended, and what carries over to tomorrow. Say explicitly whether any safety tickets were "
+    "deferred. Oldest-first is a comparison only: it is what dispatch would have achieved, not something that happened today. Use only numbers that appear in the data; never invent or estimate a number."
+)
+
+
+def llm_day_overview(metrics: dict, updates: list[dict]) -> str:
+    """Claude-written end-of-day overview; on any error, returns template_day_overview(...)."""
+    try:
+        user = f"Data for today:\n{json.dumps(_day_facts(metrics, updates), indent=1)}"
+        text = _ask_claude(_OVERVIEW_SYSTEM, user, max_tokens=600)
+        last_source["overview"] = "claude"
+        return text
+    except Exception as e:
+        log.info("llm_day_overview fell back to template: %s: %s", type(e).__name__, e)
+        last_source["overview"] = f"fallback: {type(e).__name__}"
+        return template_day_overview(metrics, updates)
+
+
+def day_overview(metrics: dict, updates: list[dict]) -> str:
+    """One end-of-day overview consolidating every update. Claude first, template fallback."""
+    if USE_LLM:
+        return llm_day_overview(metrics, updates)
+    last_source["overview"] = "fallback: USE_LLM is off"
+    return template_day_overview(metrics, updates)
 
 
 if __name__ == "__main__":

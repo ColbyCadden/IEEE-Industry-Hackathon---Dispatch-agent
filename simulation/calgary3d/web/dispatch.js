@@ -325,4 +325,5 @@ document.addEventListener('click', e => {
   while (!window.__dbg || !window.__dbg.scene || !window.__dbg.CEN) await new Promise(r => setTimeout(r, 500));
   window.__dbg.scene.add(group);
   poll(); setInterval(poll, 8000);
+  window.addEventListener('dp-routes', poll);   // a live call just re-planned
 })();

@@ -62,6 +62,8 @@ flowchart LR
 | Metrics | `dispatch/metrics.py` | P served, safety count, jobs, moved, dropped, safety dropped |
 | Language | `dispatch/llm.py` | Claude turns a free-text sick call into a structured event and writes the briefings; regex and template fallbacks run without a key or network |
 | Pipeline | `dispatch/run.py` | Runs everything; writes `dispatch/outputs/*.json`, including the 8 a.m. and noon briefings |
+| 3D downtown | `dispatch/sim3d.py`, `simulation/calgary3d/web/plan_pins.js` | Analysis tab: Semir's live SUMO 3D sim of downtown, with today's downtown jobs as pins in each crew's colour (Start the 3D sim button, needs SUMO from `simulation/setup.bat`) |
+| System diagram | `dispatch/flow.mmd` | Analysis tab: how the pieces fit together (Mermaid) |
 | Dashboard | `dispatch/app.py` | Streamlit, three tabs. **Dispatch**: today's plan, map, crews and the update → replan loop. **Briefings**: the 8 a.m. briefing, one briefing per update, and an end-of-day overview. **Analysis**: agent vs FIFO on safety coverage, priority per crew and travel |
 
 The planning is deterministic code. Claude only reads the supervisor's message and writes the

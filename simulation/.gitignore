@@ -13,3 +13,5 @@ node_modules
 *.tripinfo.xml
 .DS_Store
 Thumbs.db
+# written by the dashboard (dispatch/sim3d.py): today's plan as pins in the 3D city
+calgary3d/web/dispatch_plan.json

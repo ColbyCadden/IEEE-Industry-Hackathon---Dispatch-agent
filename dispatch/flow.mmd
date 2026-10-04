@@ -1,0 +1,18 @@
+flowchart LR
+    tickets[("311 tickets")] --> score("Score priority")
+    crews[("Crews + areas")] --> assign
+    score --> assign("Assign jobs to crews")
+    assign --> brief("8 a.m. briefing + crew map")
+    assign --> analysis("Analysis vs oldest-first")
+
+    update("Crew change or urgent job") --> agent("AI agent reads it")
+    agent -- "replan" --> assign
+
+    classDef data fill:#eef2ff,stroke:#6366f1,color:#1e1b4b
+    classDef step fill:#ffffff,stroke:#64748b,color:#0f172a
+    classDef out fill:#fffbeb,stroke:#f59e0b,color:#451a03
+    classDef live fill:#ecfdf5,stroke:#10b981,color:#064e3b
+    class tickets,crews data
+    class score,assign step
+    class brief,analysis out
+    class update,agent live

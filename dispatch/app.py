@@ -5,12 +5,14 @@ import json
 import math
 import re
 import sys
+import time
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
 
 import pydeck as pdk
 import streamlit as st
+import streamlit.components.v1 as components
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))  # `streamlit run` only puts dispatch/ on the path
@@ -24,6 +26,11 @@ try:  # the baseline / result / improved comparison is shared with `python -m di
     from dispatch import improvement  # noqa: E402
 except Exception:
     improvement = None
+
+try:  # Semir's 3D downtown simulation: our plan's jobs as pins in his scene
+    from dispatch import sim3d  # noqa: E402
+except Exception:
+    sim3d = None
 
 try:  # new urgent jobs and the day's running log of updates
     from dispatch import live as day_live  # noqa: E402
@@ -805,6 +812,99 @@ def jobs_by_type_chart(ours: Counter, theirs: Counter):
             .properties(height=34 * len(order)))
 
 
+FLOW = ROOT / "dispatch" / "flow.mmd"
+MERMAID_PAGE = """<link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700&display=swap" rel="stylesheet">
+<pre class="mermaid">__SRC__</pre>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<div class="legend">
+  <span><i style="background:#eef2ff;border-color:#6366f1"></i>Data</span>
+  <span><i style="background:#fff;border-color:#64748b"></i>Planning</span>
+  <span><i style="background:#ecfdf5;border-color:#10b981"></i>During the day</span>
+  <span><i style="background:#fffbeb;border-color:#f59e0b"></i>What the supervisor sees</span>
+</div>
+<script>
+  mermaid.initialize({startOnLoad: false, theme: "base", securityLevel: "strict",
+    flowchart: {curve: "basis", htmlLabels: true, nodeSpacing: 34, rankSpacing: 60, padding: 16},
+    themeVariables: {fontFamily: "Inter, system-ui, sans-serif", fontSize: "15px", lineColor: "#94a3b8",
+                     edgeLabelBackground: "#ffffff"}});
+  // measure the boxes with the real font, or labels get clipped
+  document.fonts.load("600 15px Inter").catch(() => {}).then(() => mermaid.run());
+</script>
+<style>
+  body { margin: 0; background: transparent; font-family: Inter, system-ui, sans-serif; }
+  pre.mermaid { display: flex; justify-content: center; margin: 0; }
+  .node rect, .node path { stroke-width: 1.5px !important; }
+  .node rect { rx: 12px; ry: 12px; }
+  .nodeLabel { font-weight: 600; }
+  .edgeLabel, .edgeLabel p { font-weight: 600; color: #059669; font-size: 13px; }
+  .flowchart-link { stroke-width: 1.6px !important; }
+  .legend { display: flex; justify-content: center; flex-wrap: wrap; gap: 6px 18px; margin-top: 10px;
+            font-size: 13px; color: #64748b; }
+  .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 4px; border: 1.5px solid;
+              margin-right: 6px; vertical-align: -1px; }
+</style>
+"""
+
+
+DIAGRAM_HEIGHT = 330
+
+
+def render_flow_diagram() -> None:
+    """The system at a glance: dispatch/flow.mmd (Mermaid), drawn in the browser."""
+    st.subheader("How the system works")
+    try:
+        src = FLOW.read_text(encoding="utf-8")
+    except OSError:
+        st.caption("dispatch/flow.mmd is missing.")
+        return
+    components.html(MERMAID_PAGE.replace("__SRC__", html.escape(src)), height=DIAGRAM_HEIGHT)
+    st.caption("The morning plan ranks today's 311 tickets and gives each crew its jobs. When a crew changes or an "
+               "urgent job is reported, the AI agent reads it and the plan is rebuilt.")
+    with st.expander("Mermaid source", icon=":material/code:"):
+        st.code(src, language="text")
+
+
+def render_downtown_3d(plan: dict, show: bool) -> None:
+    """Semir's live SUMO traffic sim of downtown Calgary, with today's downtown jobs as pins."""
+    st.subheader("3D downtown")
+    if sim3d is None or sim3d.LOCATION is None:
+        st.caption("The 3D simulation isn't available (simulation/ folder or dispatch/sim3d.py missing).")
+        return
+    jobs = sim3d.write_pins(plan, {c["crew"]: crew_rgb(c["crew"]) for c in plan["crews"]})
+    total = sum(len(c["jobs"]) for c in plan["crews"])
+    crews = sorted({j["crew"] for j in jobs})
+    who = " and ".join(f"{dot(c)} Crew {c}" for c in crews) or "No crew"
+    st.markdown(f"Live SUMO traffic simulation of downtown Calgary (about 3 × 2 km: Downtown Core and the north "
+                f"edge of the Beltline). {who} work{'s' if len(crews) == 1 else ''} here: **{len(jobs)} of today's "
+                f"{total} jobs** are inside it, drawn as tall pins in each crew's colour.", unsafe_allow_html=True)
+    if jobs:
+        st.dataframe([{"Crew": j["crew"], "Job": j["type"], "Community": j["community"].title(),
+                       "Priority": round(p10(j["P"]), 1), "Safety": "Yes" if j["safety"] else ""} for j in jobs],
+                     hide_index=True, width="stretch")
+    if not show:
+        return
+    if sim3d.running():
+        st.iframe(sim3d.URL + "?embed=1", height=640, alt="3D downtown traffic simulation with today's jobs")
+        st.caption("Drag to look around, scroll to zoom. The panel on the right toggles the plan pins, traffic and "
+                   "live incidents. Pins update within 10 s of a replan.")
+        return
+    st.info("The 3D simulation isn't running.", icon=":material/view_in_ar:")
+    if st.button("Start the 3D sim", icon=":material/play_arrow:", key="start_3d"):
+        err = sim3d.start()
+        if err:
+            st.error(err)
+            return
+        with st.spinner("Starting SUMO and loading the city (about 15 seconds)..."):
+            for _ in range(60):
+                if sim3d.running(timeout=1.0):
+                    break
+                time.sleep(0.5)
+        if sim3d.running():
+            st.rerun()
+        st.error(f"The 3D sim didn't start. See the log at {sim3d.LOG}.")
+    st.caption("Or start it yourself: simulation\\calgary3d\\start_3d.bat (needs SUMO from simulation\\setup.bat).")
+
+
 def render_analysis(data: dict, metrics: dict) -> None:
     """How the agent changes what maintenance crews spend their day on, versus oldest-first."""
     st.subheader("How the agent improves crew efficiency")
@@ -1184,4 +1284,10 @@ with tab_briefings:
 
 # --- analysis: the case for the agent ------------------------------------------------
 with tab_analysis:
+    render_flow_diagram()
+    st.divider()
     render_analysis(data, metrics)
+    st.divider()
+    render_downtown_3d(ss.noon["plan"] if ss.noon and "plan" in ss.noon else data["plan_8am"],
+                       show=getattr(tab_analysis, "open", True))  # the 3D city loads only while this tab is open
+

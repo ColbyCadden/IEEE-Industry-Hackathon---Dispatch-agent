@@ -2,10 +2,10 @@
   "crews": [
     {
       "crew": 1,
-      "zone": "N",
+      "zone": "SW",
       "centroid": [
-        51.048408,
-        -114.05822
+        51.043564,
+        -114.063834
       ],
       "workers": 4,
       "limit": 5,
@@ -55,14 +55,14 @@
           "reports": 1
         },
         {
-          "id": "26-00648442",
-          "type": "Traffic sign",
-          "service_name": "Roads - Signs - Traffic and Roadmarking",
-          "community": "BRIDGELAND/RIVERSIDE",
-          "P": 2.5,
+          "id": "26-00652377",
+          "type": "Residential waste",
+          "service_name": "WRS - Waste - Residential",
+          "community": "ERLTON",
+          "P": 1.25,
           "safety": false,
-          "lat": 51.05055069499901,
-          "lon": -114.03507983816613,
+          "lat": 51.02633258165659,
+          "lon": -114.06314803616586,
           "reports": 1
         }
       ]
@@ -77,6 +77,28 @@
       "workers": 4,
       "limit": 5,
       "jobs": [
+        {
+          "id": "26-00652057",
+          "type": "Debris",
+          "service_name": "Roads - Debris on Street/Sidewalk/Boulevard",
+          "community": "MCCALL",
+          "P": 2.25,
+          "safety": false,
+          "lat": 51.088997572302425,
+          "lon": -114.02708650389776,
+          "reports": 1
+        },
+        {
+          "id": "26-00653018",
+          "type": "Parking sign",
+          "service_name": "Roads - Signs - Parking",
+          "community": "SOUTH AIRWAYS",
+          "P": 1.25,
+          "safety": false,
+          "lat": 51.07422107050224,
+          "lon": -114.00519380543584,
+          "reports": 1
+        },
         {
           "id": "26-00652792",
           "type": "Parking sign",
@@ -100,28 +122,6 @@
           "reports": 1
         },
         {
-          "id": "26-00653018",
-          "type": "Parking sign",
-          "service_name": "Roads - Signs - Parking",
-          "community": "SOUTH AIRWAYS",
-          "P": 1.25,
-          "safety": false,
-          "lat": 51.07422107050224,
-          "lon": -114.00519380543584,
-          "reports": 1
-        },
-        {
-          "id": "26-00652057",
-          "type": "Debris",
-          "service_name": "Roads - Debris on Street/Sidewalk/Boulevard",
-          "community": "MCCALL",
-          "P": 2.25,
-          "safety": false,
-          "lat": 51.088997572302425,
-          "lon": -114.02708650389776,
-          "reports": 1
-        },
-        {
           "id": "26-00653413",
           "type": "Residential waste",
           "service_name": "WRS - Waste - Residential",
@@ -138,22 +138,22 @@
       "crew": 3,
       "zone": "E",
       "centroid": [
-        51.047265,
-        -113.96265
+        51.050547,
+        -113.965841
       ],
       "workers": 4,
       "limit": 5,
       "jobs": [
         {
-          "id": "26-00652093",
-          "type": "Damaged sign",
-          "service_name": "Roads - Signs - Missing - Damaged",
-          "community": "INGLEWOOD",
-          "P": 3.75,
-          "safety": true,
-          "lat": 51.03414052413669,
-          "lon": -114.01912581291118,
-          "reports": 2
+          "id": "26-00648442",
+          "type": "Traffic sign",
+          "service_name": "Roads - Signs - Traffic and Roadmarking",
+          "community": "BRIDGELAND/RIVERSIDE",
+          "P": 2.5,
+          "safety": false,
+          "lat": 51.05055069499901,
+          "lon": -114.03507983816613,
+          "reports": 1
         },
         {
           "id": "26-00652193",
@@ -212,15 +212,15 @@
       "limit": 5,
       "jobs": [
         {
-          "id": "26-00653375",
-          "type": "Debris",
-          "service_name": "Roads - Debris on Street/Sidewalk/Boulevard",
-          "community": "SILVERADO",
-          "P": 2.75,
+          "id": "26-00652538",
+          "type": "Parking sign",
+          "service_name": "Roads - Signs - Parking",
+          "community": "BRIDLEWOOD",
+          "P": 1.25,
           "safety": false,
-          "lat": 50.88298604108047,
-          "lon": -114.07129694074862,
-          "reports": 2
+          "lat": 50.89921921581604,
+          "lon": -114.11020921039947,
+          "reports": 1
         },
         {
           "id": "26-00652104",
@@ -234,15 +234,15 @@
           "reports": 2
         },
         {
-          "id": "26-00652538",
-          "type": "Parking sign",
-          "service_name": "Roads - Signs - Parking",
-          "community": "BRIDLEWOOD",
-          "P": 1.25,
+          "id": "26-00653375",
+          "type": "Debris",
+          "service_name": "Roads - Debris on Street/Sidewalk/Boulevard",
+          "community": "SILVERADO",
+          "P": 2.75,
           "safety": false,
-          "lat": 50.89921921581604,
-          "lon": -114.11020921039947,
-          "reports": 1
+          "lat": 50.88298604108047,
+          "lon": -114.07129694074862,
+          "reports": 2
         },
         {
           "id": "26-00649189",
@@ -272,12 +272,34 @@
       "crew": 5,
       "zone": "S",
       "centroid": [
-        51.001914,
-        -114.052638
+        51.003475,
+        -114.043834
       ],
       "workers": 4,
       "limit": 5,
       "jobs": [
+        {
+          "id": "26-00652093",
+          "type": "Damaged sign",
+          "service_name": "Roads - Signs - Missing - Damaged",
+          "community": "INGLEWOOD",
+          "P": 3.75,
+          "safety": true,
+          "lat": 51.03414052413669,
+          "lon": -114.01912581291118,
+          "reports": 2
+        },
+        {
+          "id": "26-00652760",
+          "type": "Pothole",
+          "service_name": "Roads - Pothole Maintenance",
+          "community": "ALYTH/BONNYBROOK",
+          "P": 3.25,
+          "safety": true,
+          "lat": 51.02285696668069,
+          "lon": -114.02248247207032,
+          "reports": 1
+        },
         {
           "id": "26-00652053",
           "type": "Commercial waste",
@@ -301,28 +323,6 @@
           "reports": 1
         },
         {
-          "id": "26-00652377",
-          "type": "Residential waste",
-          "service_name": "WRS - Waste - Residential",
-          "community": "ERLTON",
-          "P": 1.25,
-          "safety": false,
-          "lat": 51.02633258165659,
-          "lon": -114.06314803616586,
-          "reports": 1
-        },
-        {
-          "id": "26-00652760",
-          "type": "Pothole",
-          "service_name": "Roads - Pothole Maintenance",
-          "community": "ALYTH/BONNYBROOK",
-          "P": 3.25,
-          "safety": true,
-          "lat": 51.02285696668069,
-          "lon": -114.02248247207032,
-          "reports": 1
-        },
-        {
           "id": "26-00652996",
           "type": "Pothole",
           "service_name": "Roads - Pothole Maintenance",
@@ -339,34 +339,12 @@
       "crew": 6,
       "zone": "W",
       "centroid": [
-        51.030708,
-        -114.13655
+        51.033809,
+        -114.138197
       ],
       "workers": 4,
       "limit": 5,
       "jobs": [
-        {
-          "id": "26-00653866",
-          "type": "Pothole",
-          "service_name": "Roads - Pothole Maintenance",
-          "community": "KILLARNEY/GLENGARRY",
-          "P": 3.25,
-          "safety": true,
-          "lat": 51.030131956517685,
-          "lon": -114.13173134426395,
-          "reports": 1
-        },
-        {
-          "id": "26-00653222",
-          "type": "Debris",
-          "service_name": "Roads - Debris on Street/Sidewalk/Boulevard",
-          "community": "RICHMOND",
-          "P": 2.25,
-          "safety": false,
-          "lat": 51.02971029545911,
-          "lon": -114.11842028929551,
-          "reports": 1
-        },
         {
           "id": "26-00652611",
           "type": "Pothole",
@@ -376,6 +354,28 @@
           "safety": true,
           "lat": 51.04521146641257,
           "lon": -114.1266528552515,
+          "reports": 1
+        },
+        {
+          "id": "26-00652728",
+          "type": "Parking sign",
+          "service_name": "Roads - Signs - Parking",
+          "community": "SHAGANAPPI",
+          "P": 1.25,
+          "safety": false,
+          "lat": 51.04521146641257,
+          "lon": -114.1266528552515,
+          "reports": 1
+        },
+        {
+          "id": "26-00653866",
+          "type": "Pothole",
+          "service_name": "Roads - Pothole Maintenance",
+          "community": "KILLARNEY/GLENGARRY",
+          "P": 3.25,
+          "safety": true,
+          "lat": 51.030131956517685,
+          "lon": -114.13173134426395,
           "reports": 1
         },
         {
@@ -406,21 +406,21 @@
       "crew": 7,
       "zone": "W",
       "centroid": [
-        51.052206,
-        -114.099612
+        51.049105,
+        -114.097965
       ],
       "workers": 4,
       "limit": 5,
       "jobs": [
         {
-          "id": "26-00652728",
-          "type": "Parking sign",
-          "service_name": "Roads - Signs - Parking",
-          "community": "SHAGANAPPI",
-          "P": 1.25,
+          "id": "26-00653222",
+          "type": "Debris",
+          "service_name": "Roads - Debris on Street/Sidewalk/Boulevard",
+          "community": "RICHMOND",
+          "P": 2.25,
           "safety": false,
-          "lat": 51.04521146641257,
-          "lon": -114.1266528552515,
+          "lat": 51.02971029545911,
+          "lon": -114.11842028929551,
           "reports": 1
         },
         {

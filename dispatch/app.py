@@ -94,8 +94,14 @@ def _fake_outputs() -> dict:
     return {"plan_8am": p8, "plan_fifo": pf, "metrics": {"8am": compute(p8), "fifo": compute(pf)}, "fake": True}
 
 
+def outputs_stamp() -> tuple:
+    """When each output file last changed: part of the cache key, so a new pipeline run shows up at once."""
+    return tuple((OUT / f).stat().st_mtime_ns if (OUT / f).exists() else 0
+                 for f in ("plan_8am.json", "plan_fifo.json", "metrics.json", "event.json"))
+
+
 @st.cache_data
-def load_outputs() -> dict:
+def load_outputs(stamp: tuple = ()) -> dict:
     files = {"plan_8am": "plan_8am.json", "plan_fifo": "plan_fifo.json", "metrics": "metrics.json"}
     try:
         data = {k: json.loads((OUT / f).read_text(encoding="utf-8")) for k, f in files.items()}
@@ -106,7 +112,7 @@ def load_outputs() -> dict:
 
 
 @st.cache_data
-def load_event() -> dict | None:
+def load_event(stamp: tuple = ()) -> dict | None:
     """The disruption the pipeline replanned for (dispatch/outputs/event.json)."""
     try:
         return json.loads((OUT / "event.json").read_text(encoding="utf-8"))
@@ -537,7 +543,7 @@ def render_metrics(view: str, m: dict, fifo: dict, base: dict, metrics: dict, n_
     c2.markdown(_compare_html("Priority served (total P)", f"{ours['P']:.1f}", f"{fifo['P']:.1f}",
                               "our agent vs oldest-first", 2.2), unsafe_allow_html=True)
     noon = m if live else metrics.get("noon")
-    event = load_event() or {"crew": 4}
+    event = load_event(outputs_stamp()) or {"crew": 4}
     scope = "today's updates" if live else f"benchmark: crew {event['crew']} out"
     if noon:
         c3.markdown(_count_html("Jobs moved", str(noon.get("moved", 0)), f"to a nearby crew · {scope}"),
@@ -571,7 +577,7 @@ def _stage_html(label: str, big: str, of: str, lines: list[str], color: str) -> 
 def render_improvement(metrics: dict) -> None:
     """The improvement story in one row: oldest-first -> our 8 a.m. plan -> after a crew drops out."""
     fifo, am, noon = metrics.get("fifo"), metrics.get("8am"), metrics.get("noon")
-    event = load_event() or {"crew": 4}
+    event = load_event(outputs_stamp()) or {"crew": 4}
     st.markdown("**Improvement round:** baseline → our plan → after the crew update (same 32 workers)")
     c1, c2, c3 = st.columns(3)
     c1.markdown(_stage_html("1 BASELINE · OLDEST-FIRST", str(fifo["safety"]), f"of {fifo['n']}",
@@ -877,7 +883,7 @@ def render_crew_list(plan: dict, out_crews: set) -> None:
 # --- page ------------------------------------------------------------------
 
 st.set_page_config(page_title="311 Dispatch Agent", layout="wide")
-data = load_outputs()
+data = load_outputs(outputs_stamp())
 metrics = data["metrics"]
 ss = st.session_state
 ss.setdefault("update_text", "")

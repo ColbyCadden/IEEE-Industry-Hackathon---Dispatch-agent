@@ -5,7 +5,9 @@ Two steps:
   2. Split that work into C compact groups of K jobs, minimising how far each crew drives:
      capacitated k-means, where every round assigns jobs to crew slots optimally (Hungarian
      algorithm) and then recentres each crew on its jobs. Best of many seeded starts.
-Each crew's zone is the centre of its own jobs, and its jobs are listed in driving order.
+Then a clean-up pass moves or swaps jobs between crews whenever that shortens the total drive
+between jobs (the set of jobs never changes). Each crew's zone is the centre of its own jobs,
+and its jobs are listed in driving order.
 
 Flexible crews (the agent plan; oldest-first stays at C x K):
   3. Split the fixed workforce (C x CREW_SIZE people) across crews by workload: the priority of the
@@ -18,7 +20,7 @@ Flexible crews (the agent plan; oldest-first stays at C x K):
      order go to one of their 2 nearest crews (within ADD_KM of its centre) that has room.
 """
 import math
-from itertools import permutations
+from functools import lru_cache
 
 import numpy as np
 import pandas as pd
@@ -91,21 +93,118 @@ def compact_groups(points: np.ndarray, crews: int, jobs: int, starts: int = STAR
     return best[1], best[2]
 
 
+@lru_cache(maxsize=None)
+def _shortest_path(pts: tuple) -> tuple[float, tuple]:
+    """Shortest drive visiting every point once (open path): (km, visiting order).
+
+    Exact (Held-Karp dynamic programming) up to 10 stops; nearest-next-stop beyond that.
+    """
+    n = len(pts)
+    if n <= 1:
+        return 0.0, tuple(range(n))
+    d = [[km(a, b) for b in pts] for a in pts]
+    if n > 10:
+        best = None
+        for s in range(n):
+            order, left = [s], set(range(n)) - {s}
+            while left:
+                order.append(min(left, key=lambda i: d[order[-1]][i]))
+                left.remove(order[-1])
+            cost = sum(d[order[i]][order[i + 1]] for i in range(n - 1))
+            if best is None or cost < best[0]:
+                best = (cost, tuple(order))
+        return best
+    cost = {(1 << i, i): (0.0, -1) for i in range(n)}
+    for mask in range(1, 1 << n):
+        for last in range(n):
+            if (mask, last) not in cost:
+                continue
+            c = cost[(mask, last)][0]
+            for nxt in range(n):
+                if not mask & (1 << nxt):
+                    key = (mask | (1 << nxt), nxt)
+                    if c + d[last][nxt] < cost.get(key, (math.inf,))[0]:
+                        cost[key] = (c + d[last][nxt], last)
+    full = (1 << n) - 1
+    end = min(range(n), key=lambda i: cost[(full, i)][0])
+    total, order, mask = cost[(full, end)][0], [end], full
+    while cost[(mask, order[-1])][1] >= 0:
+        prev = cost[(mask, order[-1])][1]
+        mask ^= 1 << order[-1]
+        order.append(prev)
+    return total, tuple(reversed(order))
+
+
+def _key(jobs: list[dict]) -> tuple:
+    return tuple(sorted((j["lat"], j["lon"]) for j in jobs))
+
+
+def path_km(jobs: list[dict]) -> float:
+    """Shortest drive between a crew's jobs, visiting each once."""
+    return _shortest_path(_key(jobs))[0]
+
+
 def driving_order(start, jobs: list[dict]) -> list[dict]:
-    """Jobs in the order that minimises the drive from `start` through all of them."""
+    """Jobs along the shortest path between them, starting from the end nearer `start`."""
     if len(jobs) <= 1:
         return list(jobs)
-    pts = [(j["lat"], j["lon"]) for j in jobs]
-    if len(jobs) <= 7:  # exact: at most 5040 orders
-        best = min(permutations(range(len(jobs))),
-                   key=lambda o: km(start, pts[o[0]]) + sum(km(pts[o[i]], pts[o[i + 1]]) for i in range(len(o) - 1)))
-        return [jobs[i] for i in best]
-    left, here, out = list(range(len(jobs))), start, []  # larger crews: nearest next stop
-    while left:
-        nxt = min(left, key=lambda i: km(here, pts[i]))
-        out.append(jobs[nxt])
-        left.remove(nxt)
-        here = pts[nxt]
+    pts = _key(jobs)
+    by_point = {}
+    for j in jobs:
+        by_point.setdefault((j["lat"], j["lon"]), []).append(j)
+    order = [by_point[pts[i]].pop() for i in _shortest_path(pts)[1]]
+    if km(start, (order[-1]["lat"], order[-1]["lon"])) < km(start, (order[0]["lat"], order[0]["lon"])):
+        order.reverse()
+    return order
+
+
+def improve_groups(groups: list[list[dict]], limits: list) -> list[list[dict]]:
+    """Clean-up pass: move a job to a crew with room, or swap two jobs between crews, whenever that
+    shortens total driving between jobs. Repeats until nothing helps. The set of jobs never changes.
+
+    limits[k](group) -> that crew's job limit for the given jobs.
+    """
+    groups = [list(g) for g in groups]
+    n = len(groups)
+    cost = [path_km(g) for g in groups]
+    for _ in range(500):
+        best_gain, best_move = 1e-6, None
+        for a in range(n):
+            for i, x in enumerate(groups[a]):
+                rest_a = groups[a][:i] + groups[a][i + 1:]
+                for b in range(n):
+                    if b == a:
+                        continue
+                    if rest_a and len(groups[b]) < limits[b](groups[b] + [x]) and len(rest_a) <= limits[a](rest_a):
+                        gain = cost[a] + cost[b] - path_km(rest_a) - path_km(groups[b] + [x])
+                        if gain > best_gain:
+                            best_gain, best_move = gain, (a, rest_a, b, groups[b] + [x])
+                    if b > a:
+                        for k, y in enumerate(groups[b]):
+                            new_a, new_b = rest_a + [y], groups[b][:k] + groups[b][k + 1:] + [x]
+                            if len(new_a) <= limits[a](new_a) and len(new_b) <= limits[b](new_b):
+                                gain = cost[a] + cost[b] - path_km(new_a) - path_km(new_b)
+                                if gain > best_gain:
+                                    best_gain, best_move = gain, (a, new_a, b, new_b)
+        if best_move is None:
+            break
+        a, new_a, b, new_b = best_move
+        groups[a], groups[b] = new_a, new_b
+        cost[a], cost[b] = path_km(new_a), path_km(new_b)
+    return groups
+
+
+def finish_crews(crews: list[dict], groups: list[list[dict]], workers: list[int], limits: list) -> list[dict]:
+    """Recentre each crew on its final jobs and list them in driving order."""
+    out = []
+    for c, g, w, lim in zip(crews, groups, workers, limits):
+        if g:
+            lat = sum(j["lat"] for j in g) / len(g)
+            lon = sum(j["lon"] for j in g) / len(g)
+        else:
+            lat, lon = c["centroid"]
+        out.append({**c, "zone": zone_label(lat, lon), "centroid": [round(lat, 6), round(lon, 6)],
+                    "workers": w, "limit": lim(g), "jobs": driving_order((lat, lon), g)})
     return out
 
 
@@ -164,13 +263,15 @@ def flex_crews(df: pd.DataFrame, plan: dict, jobs: int = JOBS_PER_CREW) -> dict:
         if r.id in taken:
             continue
         job = _job(r)
-        for k in sorted(range(n), key=lambda i: km((r.lat, r.lon), centres[i]))[:2]:
-            if km((r.lat, r.lon), centres[k]) <= ADD_KM and len(groups[k]) + 1 <= job_limit(workers[k], groups[k] + [job], jobs):
-                groups[k].append(job)
-                taken.add(job["id"])
-                break
-    return {"crews": [{**c, "workers": w, "limit": job_limit(w, g, jobs), "jobs": driving_order(c["centroid"], g)}
-                      for c, w, g in zip(crews, workers, groups)]}
+        fits = [k for k in range(n) if km((r.lat, r.lon), centres[k]) <= ADD_KM
+                and len(groups[k]) + 1 <= job_limit(workers[k], groups[k] + [job], jobs)]
+        if fits:  # the crew it adds the least driving to
+            k = min(fits, key=lambda i: (path_km(groups[i] + [job]) - path_km(groups[i]), i))
+            groups[k].append(job)
+            taken.add(job["id"])
+    limits = [lambda g, w=w: job_limit(w, g, jobs) for w in workers]
+    groups = improve_groups(groups, limits)
+    return {"crews": finish_crews(crews, groups, workers, limits)}
 
 
 def _job(row) -> dict:
@@ -197,7 +298,9 @@ def make_plan(df: pd.DataFrame, order: str = "priority", crews: int = CREWS,
     plan = _fixed_plan(df, order, crews, jobs, seed)
     if flexible if flexible is not None else order == "priority":
         return flex_crews(df, plan, jobs)
-    return plan
+    limits = [lambda g: jobs] * len(plan["crews"])  # standard crews: same clean-up pass, swaps only
+    groups = improve_groups([c["jobs"] for c in plan["crews"]], limits)
+    return {"crews": finish_crews(plan["crews"], groups, [c["workers"] for c in plan["crews"]], limits)}
 
 
 def _fixed_plan(df: pd.DataFrame, order: str, crews: int, jobs: int, seed: int) -> dict:

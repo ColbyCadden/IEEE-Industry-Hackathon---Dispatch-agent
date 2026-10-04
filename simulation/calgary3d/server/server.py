@@ -219,6 +219,8 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
             self._handle_congestion()
         elif path == '/sources.json':
             self._handle_sources()
+        elif path == '/api/config':
+            self._handle_front_config()
         elif path == '/requests.json':
             self._handle_requests()
         elif path == '/routes.json':
@@ -239,6 +241,8 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
             self._handle_tts()
         elif self.path == '/call/next':
             self._handle_call_next()
+        elif self.path == '/api/calls/tool':
+            self._handle_call_tool()
         else:
             self._send_json(404, {'error': 'Not found'})
 
@@ -337,6 +341,54 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
         except Exception as e:
             self._send_json(500, {'error': str(e)})
 
+    # ---- ElevenLabs Conversational AI webhook -------------------------------
+    # The dispatch agent's tools POST here (ElevenLabs calls it, not the browser).
+    def _handle_call_tool(self):
+        body = self._read_json_body()
+        if not isinstance(body, dict):
+            self._send_json(400, {'error': 'Invalid JSON'})
+            return
+        name = (body.get('name') or body.get('tool_name') or '').strip()
+        args = body.get('arguments') or body.get('parameters') or body.get('input') or {}
+        if isinstance(args, str):
+            try:
+                args = json.loads(args)
+            except ValueError:
+                args = {}
+        root = os.path.normpath(os.path.join(_HERE, os.pardir, os.pardir))
+        if root not in sys.path:
+            sys.path.insert(0, root)
+        try:
+            from agents.dispatch import calls as C
+            if name == 'find_open_requests':
+                q = (args.get('query') or '').strip()
+                lim = int(args.get('limit') or 5)
+                pool = C._open_now()
+                if q:
+                    from agents.dispatch import updates as U
+                    _b, ranked = U.match_request(q, pool)
+                    if _b:
+                        pool = [c for _, c in ranked] or [_b]
+                out = [{'id': r['id'], 'category': r['category'],
+                        'location': r.get('location') or r.get('community') or '',
+                        'status': r['status']}
+                       for r in pool[:max(1, min(lim, 10))]]
+                self._send_json(200, {'requests': out, 'open_total': len(C._open_now())})
+                return
+            if name == 'record_311_update':
+                rid = (args.get('request_id') or '').strip()
+                act = (args.get('action') or '').strip()
+                note = (args.get('note') or '').strip()
+                res = C.handle_call(note or act, caller='elevenlabs',
+                                    request_id=rid, action=act, replan_now=True)
+                self._send_json(200, {'ok': bool(res.get('applied')),
+                                       'request_id': rid, 'action': act,
+                                       'detail': res.get('reply', '')})
+                return
+            self._send_json(400, {'error': 'unknown tool: %s' % (name or '(missing)')})
+        except Exception as e:
+            self._send_json(500, {'error': str(e)})
+
     def _handle_call_next(self):
         """One turn of the voice call: the agent asks, the caller answers,
         the issue and the routes update."""
@@ -409,6 +461,19 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
             pass
         self._send_json(200, {'potholes': out,
                               'mtime': os.path.getmtime(f) if os.path.exists(f) else None})
+
+    def _handle_front_config(self):
+        """Small config the page needs (ElevenLabs agent id). Never the API key."""
+        aid = ''
+        for envf in (os.path.join(_HERE, os.pardir, os.pardir, '.env'),
+                     os.path.join(os.environ.get('LOCALAPPDATA', ''), 'hermes', '.env')):
+            try:
+                for line in open(envf, encoding='utf-8'):
+                    if line.startswith('ELEVENLABS_AGENT_ID='):
+                        aid = line.split('=', 1)[1].strip().strip('"\'')
+            except OSError:
+                pass
+        self._send_json(200, {'elevenlabs_agent_id': aid})
 
     # ---- Sources endpoint ----
     def _handle_sources(self):

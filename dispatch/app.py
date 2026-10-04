@@ -1,11 +1,14 @@
 """Roads dispatch console: `streamlit run dispatch/app.py` (run `python -m dispatch.run` first)."""
 import hashlib
+import html
 import json
+import re
 import sys
 from pathlib import Path
 
 import pydeck as pdk
 import streamlit as st
+import streamlit.components.v1 as components
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))  # `streamlit run` only puts dispatch/ on the path
@@ -19,6 +22,16 @@ try:  # the baseline / result / improved comparison is shared with `python -m di
     from dispatch import improvement  # noqa: E402
 except Exception:
     improvement = None
+
+try:  # caller voice call: intake agent, local voice API, optional ElevenLabs voice
+    from dispatch import intake, voice, voice_server  # noqa: E402
+except Exception:
+    intake = voice = voice_server = None
+
+try:  # the score formula (and its text) live in one place
+    from dispatch import scoring  # noqa: E402
+except Exception:
+    scoring = None
 
 try:  # new urgent jobs and the day's running log of updates
     from dispatch import live as day_live  # noqa: E402
@@ -40,6 +53,17 @@ EVENT_BADGES = {  # event -> (label, badge colour, icon) for the interpretation 
     "crew_partial": ("Crew short-handed", "orange", ":material/group_remove:"),
     "new_job": ("New urgent job", "orange", ":material/add_alert:"),
 }
+
+
+
+def p10(p: float) -> float:
+    """P on the 0-10 display scale (scoring.priority_10, or 2 x P if scoring.py doesn't provide it)."""
+    scale = getattr(scoring, "priority_10", None)
+    return scale(p) if scale else round(min(10.0, 2 * p), 1)
+
+
+def crew_rgb(crew: int) -> list:
+    return CREW_COLORS[(crew - 1) % len(CREW_COLORS)]
 
 
 # --- data ------------------------------------------------------------------
@@ -84,6 +108,15 @@ def load_outputs() -> dict:
 
 
 @st.cache_data
+def load_event() -> dict | None:
+    """The disruption the pipeline replanned for (dispatch/outputs/event.json)."""
+    try:
+        return json.loads((OUT / "event.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+@st.cache_data
 def load_ticket_details() -> dict:
     """id -> {days_open, weight, requested_date} from the engine's own scoring (read-only)."""
     try:
@@ -108,6 +141,14 @@ def build_day(plan_8am: dict, metrics: dict, log: list) -> dict:
 # --- llm wrappers (contract signatures only; fall back if llm.py fails) ------
 
 EVENTS = ("crew_out", "crew_partial", "new_job", "unclear")
+
+
+def claude_ready() -> bool:
+    """True when an API key is configured, so Claude will be tried first."""
+    try:
+        return bool(llm and llm.USE_LLM and llm.has_api_key())
+    except Exception:
+        return False
 
 
 def _source(kind: str) -> str:
@@ -176,6 +217,31 @@ SOURCE_NOTES = {
     "rules": ":material/rule: Claude unavailable (no API key or no connection) - rule-based template briefing.",
     "numbers": ":material/warning: Briefing service unavailable - showing the numbers only.",
 }
+
+# The case asks what the supervisor hears at 8 a.m. and at noon: one slot each, in time order.
+BRIEF_SLOTS = {  # key -> (time, title, icon, accent colour)
+    "8am": ("8:00 a.m.", "Morning plan", "", "rgb(31,119,180)"),
+    "noon": ("12:00 noon", "Midday replan", "", "rgb(255,127,14)"),
+}
+CHIP_TONES = {
+    "good": "background:rgba(44,160,44,.16);color:rgb(44,160,44)",
+    "bad": "background:rgba(214,39,40,.14);color:rgb(214,39,40)",
+    "neutral": "background:rgba(128,128,128,.16)",
+}
+
+
+def read_by(ev: dict) -> str:
+    """Which reader turned the supervisor's message into this update."""
+    src, why = ev.get("source"), str(ev.get("why", ""))
+    if src == "claude":
+        return ":material/auto_awesome: Read by **Claude**"
+    if src == "manual":
+        return ":material/edit: Entered by hand"
+    if src == "caller":
+        return ":material/call: From a caller report (Caller report tab)"
+    if why.startswith("fallback"):
+        return ":material/rule: Read by the **rule-based parser** (Claude unavailable: no API key or no connection)"
+    return ":material/rule: Read by the **rule-based parser** (simple message, no Claude call needed)"
 
 
 # --- view helpers ------------------------------------------------------------
@@ -271,7 +337,10 @@ def render_job_detail(job: dict | None, crew: dict | None, view: str) -> None:
         ]
         st.markdown("\n".join(f"- **{k}:** {v}" for k, v in rows))
         st.caption("The source data has no street address; the coordinates are the precise location.")
-        if info:
+        explain = getattr(scoring, "explain", None)
+        if info and explain:  # scoring.py owns the formula, so this text follows any change to it
+            st.markdown(f"**Priority score:** {explain(info['weight'], info['days_open'], job['reports'])}")
+        elif info:
             extra = job["reports"] - 1
             st.markdown(
                 f"**Priority score:** {info['weight']:g} type weight + 0.25 × {info['days_open']} "
@@ -339,9 +408,9 @@ def map_layers(plan: dict, changes: dict | None, selected: dict | None = None,
                  for c in plan["crews"] if crew_id is None or c["crew"] == crew_id]
     common = dict(get_position="[lon, lat]", pickable=True)
     layers = [
-        pdk.Layer("ScatterplotLayer", points + dropped, get_fill_color="color", get_radius="radius", radius_units="'pixels'",
+        pdk.Layer("ScatterplotLayer", points + dropped, id="jobs", get_fill_color="color", get_radius="radius", radius_units="'pixels'",
                   get_line_color="line", stroked=True, line_width_min_pixels=2, opacity=0.85, **common),
-        pdk.Layer("TextLayer", centroids, get_text="label", get_color="color", get_size=14,
+        pdk.Layer("TextLayer", centroids, id="crews", get_text="label", get_color="color", get_size=14,
                   get_alignment_baseline="'bottom'", font_weight=700, **common),
     ]
     if selected:  # ring around the selected job, drawn on top; all other markers stay
@@ -374,7 +443,11 @@ def pick_grid() -> list:
 def render_map(plan: dict, changes: dict | None = None, selected: dict | None = None,
                crew: dict | None = None, height: int = 500, key_prefix: str = "map",
                tag: str = "", pick: bool = False):
-    """Draw the map. In pick mode, returns (lat, lon) of the point the supervisor clicked, else None."""
+    """Draw the map.
+
+    Pick mode returns (lat, lon) of the clicked spot. Normal mode returns ("job", id) or ("crew", n)
+    when a job marker or crew label was clicked, else None.
+    """
     if selected:
         view_state = pdk.ViewState(latitude=selected["lat"], longitude=selected["lon"], zoom=14.5)
     elif crew and crew["jobs"]:
@@ -403,9 +476,15 @@ def render_map(plan: dict, changes: dict | None = None, selected: dict | None = 
         hit = (event.selection.objects.get("pick_grid") or []) if event else []
         st.caption("Click anywhere on the map to place the job (it snaps to the nearest point, within about 300 m).")
         return (hit[0]["lat"], hit[0]["lon"]) if hit else None
-    st.pydeck_chart(deck, key=key, height=height, alt=alt)
-    st.caption("Colour = crew. Large dots = safety tickets. Black outline = moved. Yellow outline = new urgent job. "
-               "Grey = deferred.")
+    event = st.pydeck_chart(deck, key=key, height=height, alt=alt, on_select="rerun", selection_mode="single-object")
+    st.caption("Click a job or a crew name. Colour = crew · large dot = safety ticket · black outline = moved · "
+               "yellow outline = new urgent job · grey = deferred.")
+    objects = event.selection.objects if event else {}
+    job_hit, crew_hit = objects.get("jobs") or [], objects.get("crews") or []
+    if job_hit and job_hit[0].get("id") != st.session_state.get("selected_job"):
+        return ("job", job_hit[0]["id"])
+    if crew_hit and crew_hit[0].get("crew") != st.session_state.get("selected_crew"):
+        return ("crew", crew_hit[0]["crew"])
     return None
 
 
@@ -435,27 +514,14 @@ def render_facts(view: str, plan: dict, m: dict) -> None:
 def render_assistant_turns(view: str, plan: dict, changes: dict | None) -> None:
     """The conversation: the agent's briefing, the supervisor's last update, and what the agent did with it."""
     bot, me = ":material/smart_toy:", ":material/person:"
-    with st.chat_message("assistant", avatar=bot):
-        # operational briefing only: the oldest-first figures stay on the Analysis tab
-        if view == "Agent":
-            text, src = cached_briefing("ops:8am", data["plan_8am"], {"8am": metrics["8am"]}, "8am")
-        else:
-            ev = ss.noon["event"]
-            ops = {k: v for k, v in ss.noon["metrics"].items() if k != "fifo"}
-            digest = hashlib.md5(json.dumps(ss.log, sort_keys=True, default=str).encode()).hexdigest()
-            text, src = cached_briefing(f"ops:noon:{digest}", plan, ops, "noon", changes, event=ev)
-        st.markdown(text)
-        st.caption(SOURCE_NOTES[src])
+    render_briefings(view)
 
     if ss.get("applied"):
         ev, got = ss.applied["event"], ss.applied["received"]
         if got:
             with st.chat_message("user", avatar=me):
                 st.markdown(got)
-        how = {"claude": ":material/auto_awesome: Read by Claude", "manual": ":material/edit: Entered by hand"}.get(
-            ev.get("source"), ":material/rule: Read by the rule-based parser"
-            + (" (Claude unavailable: no API key or no connection)" if str(ev.get("why", "")).startswith("fallback")
-               else " (no Claude call needed)"))
+        how = read_by(ev)  # Claude / rule-based / by hand / from a caller report
         with st.chat_message("assistant", avatar=bot):
             st.markdown(":material/check_circle: **Understood. No change needed.**" if ss.applied.get("noop")
                         else ":material/check_circle: **Understood. Plan updated.**")
@@ -516,6 +582,237 @@ def render_assistant_turns(view: str, plan: dict, changes: dict | None) -> None:
                 st.text_input("Your answer", key="followup", placeholder="e.g. crew 4, or: pothole at 5 Ave SW",
                               on_change=_answer)
                 st.button("Send answer", icon=":material/reply:", on_click=_answer)
+
+
+def _sentences(text: str) -> list[str]:
+    """Split a briefing into sentences without breaking on 'a.m.' / 'p.m.'."""
+    guarded = re.sub(r"\b([ap])\.m\.", r"\1<dot>m<dot>", text.strip())
+    parts = [p.replace("<dot>", ".") for p in re.split(r"(?<=[.!?])\s+(?=[A-Z0-9])", guarded) if p.strip()]
+    if len(parts) > 1 and len(parts[0].split()) <= 3:  # "Good morning." opens the next point, not its own
+        parts[:2] = [f"{parts[0]} {parts[1]}"]
+    return parts
+
+
+def _brief_card_html(slot: str, text: str | None, chips: list[tuple[str, str]], active: bool) -> str:
+    """One timeline card: time + title, highlight chips, then the briefing as a numbered list.
+
+    text=None renders the waiting state (no crew update yet). Briefing text is escaped: it may come
+    from Claude.
+    """
+    when, title, icon, accent = BRIEF_SLOTS[slot]
+    border = f"2px solid {accent}" if active else "1px solid rgba(128,128,128,.35)"
+    tag = (f"<span style='margin-left:auto;font-size:.72rem;font-weight:600;padding:.1rem .5rem;"
+           f"border-radius:1rem;background:{accent};color:white'>on the map</span>" if active else "")
+    icon_html = f"<span style='font-size:1.25rem'>{icon}</span>" if icon else ""
+    head = (f"<div style='display:flex;align-items:center;gap:.5rem;flex-wrap:wrap'>{icon_html}"
+            f"<span style='font-weight:800;color:{accent}'>{when}</span>"
+            f"<span style='font-weight:600;opacity:.85'>· {title}</span>{tag}</div>")
+    if text is None:
+        return (f"<div style='border:1px dashed rgba(128,128,128,.5);border-left:5px solid {accent};"
+                f"border-radius:.6rem;padding:.7rem 1rem;margin-bottom:.4rem;opacity:.6'>{head}"
+                f"<div style='font-style:italic;margin-top:.45rem'>Waiting for a crew update. Report one below "
+                f"and the noon briefing appears here.</div></div>")
+    pills = "".join(f"<span style='display:inline-block;margin:.45rem .35rem 0 0;padding:.15rem .6rem;"
+                    f"border-radius:1rem;font-size:.82rem;font-weight:700;{CHIP_TONES[tone]}'>{html.escape(label)}"
+                    f"</span>" for label, tone in chips)
+    items = "".join(f"<li style='margin:.2rem 0'>{html.escape(s)}</li>" for s in _sentences(text))
+    return (f"<div style='border:{border};border-left:5px solid {accent};border-radius:.6rem;"
+            f"padding:.7rem 1rem;margin-bottom:.4rem'>{head}<div>{pills}</div>"
+            f"<ol style='margin:.55rem 0 0 1.1rem;padding:0;line-height:1.45'>{items}</ol></div>")
+
+
+def _event_label(event: dict) -> str:
+    if event.get("event") == "new_job":
+        return f"New job: {event['job'].get('label', 'urgent job')}"
+    if event.get("event") == "crew_partial":
+        return f"Crew {event.get('crew')} short-handed ({float(event.get('capacity', 0.5)):.0%})"
+    return f"Crew {event.get('crew')} out"
+
+
+def render_briefings(view: str) -> None:
+    """The 8 a.m. and noon briefings in time order. Operational only: no oldest-first figures here."""
+    text, src = cached_briefing("ops:8am", data["plan_8am"], {"8am": metrics["8am"]}, "8am")
+    m = metrics["8am"]
+    chips = [(f"{m['safety']} safety tickets", "good"), (f"{m['n']} jobs", "neutral")]
+    st.markdown(_brief_card_html("8am", text, chips, active=view == "Agent"), unsafe_allow_html=True)
+    st.caption(SOURCE_NOTES[src])
+
+    noon, log = ss.noon, ss.get("log") or []
+    if noon and "plan" in noon:
+        ev, nm = noon["event"], noon["metrics"]["noon"]
+        ops = {k: v for k, v in noon["metrics"].items() if k != "fifo"}
+        digest = hashlib.md5(json.dumps(log, sort_keys=True, default=str).encode()).hexdigest()
+        text, src = cached_briefing(f"ops:noon:{digest}", noon["plan"], ops, "noon", noon["changes"], event=ev)
+        lost = nm.get("safety_dropped", 0)
+        chips = [(_event_label(ev) if len(log) == 1 else f"{len(log)} updates today", "bad"),
+                 (f"{nm.get('moved', 0)} moved", "neutral"), (f"{nm.get('dropped', 0)} deferred", "neutral")]
+        if nm.get("added"):
+            chips.append((f"{nm['added']} new job{'s' if nm['added'] != 1 else ''}", "neutral"))
+        chips.append((f"{lost} safety dropped", "good" if lost == 0 else "bad"))
+        st.markdown(_brief_card_html("noon", text, chips, active=view == "Agent - noon"), unsafe_allow_html=True)
+        st.caption(SOURCE_NOTES[src])
+    else:
+        st.markdown(_brief_card_html("noon", None, [], active=False), unsafe_allow_html=True)
+
+
+VOICE_WIDGET = ROOT / "dispatch" / "voice_call.html"
+
+
+@st.cache_resource
+def voice_api_port() -> int | None:
+    """Start the local voice API once per dashboard process (see dispatch/voice_server.py)."""
+    try:
+        return voice_server.start()
+    except Exception:
+        return None
+
+
+def _new_call(greet: bool = True) -> None:
+    """Start a call in the shared store. greet: say the opening line in typed mode (not on first load)."""
+    ss_ = st.session_state
+    ss_.call_count = ss_.get("call_count", 0) + 1
+    ss_.call_id = voice_server.new_call(ss_.caller_plan, ss_.call_count)
+    ss_.speak_text = intake.OPENING if greet else None
+
+
+def _typed(plan: dict) -> None:
+    """A typed caller line: same conversation store as the voice call."""
+    ss_ = st.session_state
+    text = (ss_.get(f"caller_msg_{ss_.call_id}") or "").strip()
+    if text:
+        with st.spinner("Agent is replying..."):
+            out = voice_server.turn(ss_.call_id, text)
+        ss_.speak_text = out["reply"]
+
+
+def _speak_once(text: str, use_voice: bool) -> None:
+    """Say a typed-mode reply: ElevenLabs when a key is set, else the browser's built-in voice."""
+    audio = voice.speak(text) if use_voice else None
+    if audio:
+        st.audio(audio, format="audio/mp3", autoplay=True)
+        return
+    components.html(  # browser speech synthesis: free, offline, no key
+        f"<script>/*{hash(text) ^ id(text)}*/const u=new SpeechSynthesisUtterance({json.dumps(text)});u.rate=1.05;"
+        f"speechSynthesis.cancel();speechSynthesis.speak(u);</script>", height=0)
+
+
+def _caller_map(state: dict, plan: dict) -> None:
+    """The caller's pin, the nearest crew's jobs in colour, everything else faint."""
+    lat, lon = state["lat"], state["lon"]
+    nearest = min(plan["crews"], key=lambda c: intake._km(lat, lon, *c["centroid"]))
+    r, g, b = CREW_COLORS[(nearest["crew"] - 1) % len(CREW_COLORS)]
+    jobs = [{**j, "crew": c["crew"], "color": [r, g, b, 230] if c is nearest else [150, 150, 150, 90],
+             "radius": 6 if c is nearest else 3} for c in plan["crews"] for j in c["jobs"]]
+    pin = [{"lat": lat, "lon": lon, "type": "Caller report", "where": state["where"]}]
+    layers = [
+        pdk.Layer("ScatterplotLayer", jobs, get_position="[lon, lat]", get_fill_color="color", get_radius="radius",
+                  radius_units="'pixels'", pickable=True),
+        pdk.Layer("ScatterplotLayer", pin, get_position="[lon, lat]", get_fill_color=[214, 39, 40], get_radius=11,
+                  radius_units="'pixels'", stroked=True, get_line_color=[255, 255, 255], line_width_min_pixels=3,
+                  pickable=True),
+        pdk.Layer("TextLayer", [{"lat": nearest["centroid"][0], "lon": nearest["centroid"][1],
+                                 "label": f"Crew {nearest['crew']}"}], get_position="[lon, lat]", get_text="label",
+                  get_color=[r, g, b], get_size=14, font_weight=700),
+    ]
+    st.pydeck_chart(pdk.Deck(layers=layers, initial_view_state=pdk.ViewState(latitude=lat, longitude=lon, zoom=12),
+                             map_provider="carto", map_style="light",
+                             tooltip={"text": "{type} {where}"}),
+                    key=f"caller_map_{lat:.5f}_{lon:.5f}", height=260,
+                    alt="Map with the caller's reported location and the nearest crew's jobs")
+    approx = " · approximate (one street of the pair)" if state["precision"] == "approximate" else ""
+    st.caption(f":material/location_on: **{state['where']}**{approx} · red = caller's report, colour = crew "
+               f"{nearest['crew']}'s jobs today")
+
+
+def _render_call(call_id: str, plan: dict, on_add=None) -> None:
+    """Transcript, map and ticket for one call; re-run every second so voice turns appear live."""
+    call = voice_server.get(call_id)
+    if call is None:
+        return
+    for m in call["history"]:
+        with st.chat_message(m["role"], avatar=":material/call:" if m["role"] == "user" else ":material/support_agent:"):
+            st.write(m["content"])
+    if call["source"]:
+        st.caption({"claude": ":material/auto_awesome: Replies by Claude.",
+                    "rules": ":material/rule: Rule-based call-taker (Claude unavailable: no API key or no "
+                             "connection)."}[call["source"]])
+    state = call["state"]
+    if state["lat"] is not None:
+        _caller_map(state, plan)
+    elif state["failed_location"]:
+        st.caption(f":material/wrong_location: Couldn't place “{state['failed_location']}” on the map yet.")
+    t = call["ticket"]
+    if t:
+        with st.container(border=True):
+            st.markdown(f"**:material/assignment_turned_in: Ticket {t['id']} logged** · {t['type']}"
+                        )
+            if t["safety"]:
+                st.badge("Safety ticket", color="red")
+            where = f"- **Where:** {t['where']}" + (f" ({t['community'].title()})" if t["community"] else "")
+            nearest = f"- **Nearest crew:** Crew {t['crew']} ({t['zone']}), {t['crew_km']} km from its zone centre"
+            if on_add is None:
+                st.markdown("\n".join([where, f"- **Priority:** {p10(t['P']):.1f} / 10 (P {t['P']:.2f}, type weight {t['P']:g}, new today, "
+                                        f"1 report)", nearest, f"- **Today's plan:** {t['fit']}"]))
+            else:
+                sev = caller_severity(t)
+                st.markdown("\n".join([where, f"- **Severity:** {day_live.SEVERITY_LABELS[sev]} ({sev} of 3)",
+                                        nearest]))
+            st.caption(f"Caller said: “{t['details']}”")
+            if on_add is not None:
+                added = call_id in st.session_state.get("added_calls", set())
+                if st.button("Added to today's plan" if added else "Add to today's plan", type="primary",
+                             icon=":material/check:" if added else ":material/playlist_add:", disabled=added,
+                             key=f"add_call_{call_id}", width="stretch"):
+                    on_add(call_id, t)
+                    st.rerun(scope="app")  # this runs inside the live fragment: refresh the whole page
+                result = st.session_state.get("added_effects", {}).get(call_id)
+                if result:
+                    st.success(result, icon=":material/check_circle:")
+
+
+def caller_severity(ticket: dict) -> int:
+    """A caller ticket's severity on the live-day scale: type weight 3 -> high (2), 2 -> routine (1), 1 -> low (0)."""
+    return max(0, min(2, int(round(ticket["P"])) - 1))
+
+
+def render_caller_intake(plan: dict, on_add=None) -> None:
+    """Caller report: talk (or type) to the 311 agent until it knows what the problem is and exactly where."""
+    if intake is None:
+        st.caption("Caller intake isn't available (dispatch/intake.py failed to import).")
+        return
+    ss_ = st.session_state
+    ss_.caller_plan = plan
+    if not ss_.get("call_id") or voice_server.get(ss_.call_id) is None:
+        _new_call(greet=False)
+    use_voice = voice.has_voice_key()
+    port = voice_api_port()
+
+    st.caption("Talk to the 311 agent as the caller. It asks follow-up questions until it knows what the "
+               "problem is and exactly where, then logs a scored ticket.")
+    if port:
+        hint = ("Natural voice: ElevenLabs." if use_voice else
+                "Voice: your browser's built-in voice. Add ELEVENLABS_API_KEY to .env for a natural voice.")
+        html = (VOICE_WIDGET.read_text(encoding="utf-8").replace("__API__", f"http://127.0.0.1:{port}")
+                .replace("__CALL__", ss_.call_id).replace("__OPENING__", json.dumps(intake.OPENING))
+                .replace("__VOICE__", hint + " Works in Chrome or Edge; allow the microphone when asked."))
+        components.html(html, height=104)
+    else:
+        st.caption(":material/mic_off: The voice service couldn't start (no free port from 8502). Type below.")
+
+    c_speak, c_new = st.columns([3, 2], vertical_alignment="center")
+    c_speak.toggle("Read typed replies aloud", key="speak_replies", value=False,
+                   help="For typed messages. The voice call always speaks its replies.")
+    c_new.button("New call", icon=":material/restart_alt:", on_click=_new_call, key="new_call", width="stretch")
+
+    st.fragment(_render_call, run_every=1.0)(ss_.call_id, plan, on_add)
+
+    text = ss_.pop("speak_text", None)
+    if text and ss_.get("speak_replies"):
+        _speak_once(text, use_voice)
+    call = voice_server.get(ss_.call_id)
+    if call and not call["done"]:
+        st.chat_input("Or type what the caller says...", key=f"caller_msg_{ss_.call_id}",
+                      on_submit=_typed, args=(plan,))
 
 
 def render_crew_list(plan: dict, changes: dict | None, out_crews: set, slots: dict | None = None) -> None:
@@ -594,10 +891,7 @@ def render_analysis(metrics: dict) -> None:
                      "baseline is the 8 a.m. list and never saw them.")
         summary_ok = n == 1 and event.get("event") == "crew_out"  # the summary sentence describes one crew out
     else:  # the reference disruption from `python -m dispatch.run`
-        try:
-            event = json.loads((OUT / "event.json").read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            event = None
+        event = load_event()
         bundle, note = metrics, "Row 3 is the reference disruption from `python -m dispatch.run`."
 
     st.markdown("##### Improvement round: baseline → agent plan → replanned")
@@ -606,15 +900,22 @@ def render_analysis(metrics: dict) -> None:
         df, summary = comparison_table(bundle, event, noon_label)
         st.table(df, hide_index=True)
         st.caption(note + (f" {summary}" if summary and summary_ok else ""))
+        am, nm = bundle.get("8am"), bundle.get("noon")
+        if am and nm and am["P"] and am["n"]:
+            kept = ("every safety ticket" if nm.get("safety_dropped", 0) == 0
+                    else f"all but {nm['safety_dropped']} safety ticket(s)")
+            st.markdown(f"**Disruption.** {nm.get('moved', 0)} jobs moved to a nearby crew, {nm.get('dropped', 0)} "
+                        f"deferred. The replan uses {nm['n']} of {am['n']} job slots and still serves "
+                        f"**{nm['P'] / am['P']:.0%}** of the 8 a.m. plan's total priority, keeping {kept}.")
     except Exception:  # unexpected metrics shape: say so rather than break the page
         st.caption("Comparison unavailable: run `python -m dispatch.run`.")
 
     f_col, s_col = st.columns(2, gap="medium")
     with f_col:
         st.markdown("##### Priority score")
-        st.markdown("P = hazard type weight (0–3) + 0.25 × days open + 0.5 × extra reports of the same problem. "
-                    "Higher means more urgent. Weight 3: potholes, missing or damaged signs. 2: debris, traffic "
-                    "markings. 1: service requests. 0: not a field-crew job.")
+        formula = getattr(scoring, "FORMULA", None) or "P = type weight (0-3) + 0.25 x days open + 0.5 x extra reports"
+        st.markdown(f"`{formula}`. Higher means more urgent. Weight 3: potholes, missing or damaged signs. "
+                    "2: debris, traffic markings. 1: service requests. 0: not a field-crew job.")
     with s_col:
         st.markdown("##### Robustness")
         st.markdown(SENSITIVITY_NOTE)
@@ -733,6 +1034,18 @@ def _place_pending(lat: float, lon: float) -> None:
     _apply({**ss.pending["event"], "source": ss.pending["event"].get("source")}, ss.pending["received"])
 
 
+def _add_call(call_id: str, ticket: dict) -> None:
+    """Put a caller's logged report on today's plan as a new job (located already), then replan."""
+    spec = day_live.make_job_spec(ticket["type"], caller_severity(ticket), ticket["where"], ticket["community"],
+                                  ticket["details"])
+    day_live.finish_location(spec, ticket["lat"], ticket["lon"], "caller report (OpenStreetMap)")
+    _apply({"event": "new_job", "job": spec, "crew": None, "capacity": 1.0, "question": None, "source": "caller"},
+           f"Caller: {ticket['details']}")
+    ss.added_calls = ss.get("added_calls", set()) | {call_id}
+    effect = (ss.applied or {}).get("effect") or "Added to today's plan; the day was replanned."
+    ss.added_effects = {**ss.get("added_effects", {}), call_id: effect}
+
+
 def _cancel_pending() -> None:
     ss.pending = None
 
@@ -807,8 +1120,15 @@ with tab_dispatch:
                 st.rerun()
         else:
             ev_tag = ss.noon["event"] if ss.noon and "event" in ss.noon else {}
-            render_map(plan, changes, sel_job, sel_crew, height=620,
-                       tag=f"{view}_{len(ss.log)}_{ev_tag.get('event')}_{ev_tag.get('crew')}_{ev_tag.get('capacity')}")
+            hit = render_map(plan, changes, sel_job, sel_crew, height=620,
+                             tag=f"{view}_{len(ss.log)}_{ev_tag.get('event')}_{ev_tag.get('crew')}_"
+                                 f"{ev_tag.get('capacity')}")
+            if hit:  # a click on the map selects that job or isolates that crew
+                if hit[0] == "job":
+                    select_job(hit[1])
+                else:
+                    ss.selected_crew = hit[1]
+                st.rerun()
         if ss.selected_job:
             render_job_detail(sel_job, sel_job_crew, VIEW_LABELS[view])
             if sel_crew:
@@ -817,8 +1137,21 @@ with tab_dispatch:
             render_crew_panel(sel_crew, changes, out_crews)
 
     with right:
-        st.markdown("**:material/forum: Dispatch assistant**")
-        with st.container(border=True):
+        with st.container(horizontal=True, vertical_alignment="center"):
+            st.markdown("**:material/forum: Dispatch assistant**")
+            st.space("stretch")
+            if claude_ready():
+                st.badge("Claude", icon=":material/auto_awesome:", color="green",
+                         help="An API key is set: Claude reads updates, with the rule-based parser as backup.")
+            else:
+                st.badge("Rule-based", icon=":material/rule:", color="gray",
+                         help="No ANTHROPIC_API_KEY on this machine: the rule-based parser reads updates.")
+        crew_tab, caller_tab = st.tabs([":material/engineering: Crew update", ":material/call: Caller report"],
+                                       key="report_tab", on_change="rerun")  # keyed: stays put across reruns
+        with caller_tab:
+            render_caller_intake(ss.noon["plan"] if ss.noon and "plan" in ss.noon else data["plan_8am"],
+                                 on_add=_add_call if day_live else None)
+        with crew_tab, st.container(border=True):
             render_assistant_turns(view, plan, changes)
             with st.form("crew_update", clear_on_submit=True, border=False):
                 st.text_area("Update", key="update_text", height=80, label_visibility="collapsed",

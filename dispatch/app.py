@@ -214,12 +214,28 @@ def safe_briefing(plan: dict, metrics: dict, when: str, changes: dict | None = N
             f"(oldest-first would cover {f['safety']})."), "numbers"
 
 
+@st.cache_resource
+def _shared_briefings() -> dict:
+    """Briefings shared by every visitor of this dashboard process (same plan state -> same text)."""
+    return {}
+
+
 def cached_briefing(key: str, *args, **kwargs) -> tuple[str, str]:
-    """One briefing per plan state per session: clicks and reruns don't call Claude again."""
+    """One briefing per plan state: reruns, clicks and new visitors don't call Claude again.
+
+    Only Claude-written briefings (or template ones when there is no key) are shared, so a one-off
+    network failure never sticks for everyone.
+    """
     store = st.session_state.setdefault("briefings", {})
     if key not in store:
-        with st.spinner("Writing the briefing..."):
-            store[key] = safe_briefing(*args, **kwargs)
+        shared, full = _shared_briefings(), f"{key}|{outputs_stamp()}|{claude_ready()}"
+        if full in shared:
+            store[key] = shared[full]
+        else:
+            with st.spinner("Writing the briefing..."):
+                store[key] = safe_briefing(*args, **kwargs)
+            if store[key][1] == "claude" or not claude_ready():
+                shared[full] = store[key]
     return store[key]
 
 
@@ -1115,8 +1131,18 @@ st.caption("Who should 311 send next? · Calgary Roads dispatch · 8 crews, 32 w
 if data["fake"]:
     st.warning("Showing sample data: run `python -m dispatch.run` to generate dispatch/outputs/.")
 
-timeline = day_timeline(data["plan_8am"], metrics, ss.log) if day_live else []
-tab_labels = [":material/local_shipping: Dispatch", f":material/campaign: Briefings ({len(timeline)})",
+_timeline: list | None = None
+
+
+def get_timeline() -> list:
+    """The day's briefings, written on first use in this run (after the map and crews are on screen)."""
+    global _timeline
+    if _timeline is None:
+        _timeline = day_timeline(data["plan_8am"], metrics, ss.log) if day_live else []
+    return _timeline
+
+
+tab_labels = [":material/local_shipping: Dispatch", f":material/campaign: Briefings ({len(ss.log) + 1 if day_live else 0})",
               ":material/insights: Analysis"]
 # The Briefings label changes with each update, which resets the tabs; stay on the tab the user had open.
 _was = (ss.get("main_tab") or "").split(" (")[0]
@@ -1175,29 +1201,6 @@ with tab_dispatch:
                 else:
                     select_crew(hit[1])
                 st.rerun()
-
-        # under the map: the selected crew and job, or the latest briefing when nothing is selected
-        if sel_crew and ss.selected_job:
-            c_list, c_job = st.columns([1, 1])
-            with c_list:
-                st.subheader("Selected crew")
-                render_crew_panel(sel_crew, changes, out_crews)
-            with c_job:
-                st.subheader("Selected job")
-                render_job_detail(sel_job, sel_job_crew, view)
-        elif sel_crew:
-            st.subheader("Selected crew")
-            render_crew_panel(sel_crew, changes, out_crews)
-        elif ss.selected_job:
-            st.subheader("Selected job")
-            render_job_detail(sel_job, sel_job_crew, view)
-        elif timeline:
-            st.subheader("Latest briefing")
-            t = timeline[-1]
-            st.markdown(_brief_card_html(t["when"], t["title"], t["accent"], t["text"], t["chips"]),
-                        unsafe_allow_html=True)
-            st.caption(f"{SOURCE_NOTES[t['src']]} Every briefing and the end-of-day overview are on the "
-                       "Briefings tab.")
 
     with right:
         render_crew_list(plan, out_crews)
@@ -1275,10 +1278,34 @@ with tab_dispatch:
                 st.button("Undo last update", icon=":material/undo:", on_click=_undo, width="stretch")
                 st.button("Reset to 8 a.m. plan", icon=":material/restart_alt:", on_click=_reset, width="stretch")
 
+    with left:  # drawn last: the briefing may wait on Claude
+        # under the map: the selected crew and job, or the latest briefing when nothing is selected
+        if sel_crew and ss.selected_job:
+            c_list, c_job = st.columns([1, 1])
+            with c_list:
+                st.subheader("Selected crew")
+                render_crew_panel(sel_crew, changes, out_crews)
+            with c_job:
+                st.subheader("Selected job")
+                render_job_detail(sel_job, sel_job_crew, view)
+        elif sel_crew:
+            st.subheader("Selected crew")
+            render_crew_panel(sel_crew, changes, out_crews)
+        elif ss.selected_job:
+            st.subheader("Selected job")
+            render_job_detail(sel_job, sel_job_crew, view)
+        elif get_timeline():
+            st.subheader("Latest briefing")
+            t = get_timeline()[-1]
+            st.markdown(_brief_card_html(t["when"], t["title"], t["accent"], t["text"], t["chips"]),
+                        unsafe_allow_html=True)
+            st.caption(f"{SOURCE_NOTES[t['src']]} Every briefing and the end-of-day overview are on the "
+                       "Briefings tab.")
+
 # --- briefings: 8 a.m., every update, end of day -----------------------------------
 with tab_briefings:
-    if timeline:
-        render_briefings_tab(timeline)
+    if get_timeline():
+        render_briefings_tab(get_timeline())
     else:
         st.info("Briefings need the live-day engine (dispatch/live.py).")
 

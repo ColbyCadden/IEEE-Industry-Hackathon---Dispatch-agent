@@ -94,6 +94,7 @@ if __name__ == "__main__":
     scored = score(load_clean_tickets())
 
     plan = make_plan(scored, order="priority")
+    original = copy.deepcopy(plan)
     for event in ({"event": "crew_out", "crew": 4, "capacity": 0.0},
                   {"event": "crew_partial", "crew": 4, "capacity": 0.4}):
         new_plan, changes = apply_event(plan, event)
@@ -112,4 +113,4 @@ if __name__ == "__main__":
                   f"{_km(job, to['centroid']):.1f} km to new crew centroid")
         for j in changes["dropped_jobs"]:
             print(f"    dropped {j['id']}  P={j['P']} safety={j['safety']}")
-    print(f"\nplan unchanged by replan: {sum(len(c['jobs']) for c in plan['crews']) == 40}")
+    print(f"\nplan unchanged by replan: {plan == original}")

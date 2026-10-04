@@ -1,10 +1,10 @@
-# Who should 311 send next? — a dispatch agent for Calgary Roads
+# City Link — who should 311 send next? A dispatch agent for Calgary Roads
 
 IEEE YP Industry Hackathon · Software and Computational Math · Case 1 ([case brief](docs/CASE_BRIEF.md))
 
 Oldest-first (FIFO) dispatch is fair to the queue, not to the public: a missing stop sign waits
 behind yesterday's parking complaint. This agent scores open 311 tickets by hazard, assigns a day
-of work to 8 crews × 5 jobs, and replans when a crew calls in sick. It then tells the Roads
+of work to 8 crews (32 workers, sized by workload), and replans when a crew calls in sick. It then tells the Roads
 supervisor what changed, in plain English.
 
 ## Results (frozen sample, same 8 crews and 32 workers for both plans)

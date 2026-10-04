@@ -40,8 +40,6 @@ ADD_KM = 6.0                     # an extra job may join a crew whose centre is 
 KM_LAT = 111.32                                          # km per degree of latitude
 KM_LON = 111.32 * math.cos(math.radians(CITY_CENTRE[0]))  # km per degree of longitude in Calgary
 
-JOB_FIELDS = ["id", "type", "service_name", "community", "P", "safety", "lat", "lon", "reports"]
-
 
 def zone_label(lat: float, lon: float) -> str:
     """8-point compass direction of (lat, lon) as seen from CITY_CENTRE."""

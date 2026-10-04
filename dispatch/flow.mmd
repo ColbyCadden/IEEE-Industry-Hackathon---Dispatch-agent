@@ -1,0 +1,21 @@
+flowchart TD
+    load(["Load tickets"]) --> data["Calgary 311 data"]
+    data --> select["Prioritized data selection"]
+    crews["Crew sizes + areas"] --> select
+    select --> agent["Agent assigns prioritized cases<br/>+ crew locations"]
+    agent --> brief["Front end: 8 a.m. brief<br/>Map showing crew locations"]
+    brief ---|"+"| analysis["Front end: Analysis<br/>Compares to FIFO"]
+
+    call["ElevenLabs call parse"] --> inputs["Input: crew size (or manual)<br/>Input: adding high-priority cases"]
+    agent -. "agentic loop" .-> inputs
+    inputs --> parse["AI agent parses<br/>+ collects input"]
+    parse -->|"replan"| agent
+
+    classDef load fill:#fde8e8,stroke:#e5484d,color:#1f1f1f,stroke-width:2px
+    classDef core fill:#f4f4f5,stroke:#52525b,color:#1f1f1f,stroke-width:2px
+    classDef input fill:#e6f6ea,stroke:#2f9e44,color:#1f1f1f,stroke-width:2px
+    classDef front fill:#fff8d6,stroke:#d4a72c,color:#1f1f1f,stroke-width:2px
+    class load load
+    class data,crews,select,agent,parse core
+    class call,inputs input
+    class brief,analysis front

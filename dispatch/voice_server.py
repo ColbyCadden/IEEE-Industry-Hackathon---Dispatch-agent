@@ -10,14 +10,26 @@ Typed messages from the dashboard go through the same store (turn()), so one con
 voice and typing, and the page shows the same transcript, map and ticket either way.
 """
 import json
+import sys
 import threading
+import types
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from dispatch import intake, voice
 
-_calls: dict[str, dict] = {}
-_lock = threading.Lock()
+# Streamlit reloads edited modules (after a git pull, say) while the server thread keeps running, so the
+# call store lives outside this module and the handler looks up the current code on every request.
+_store = sys.modules.setdefault("dispatch._voice_store", types.ModuleType("dispatch._voice_store"))
+if not hasattr(_store, "calls"):
+    _store.calls, _store.lock = {}, threading.Lock()
+_calls: dict[str, dict] = _store.calls
+_lock = _store.lock
+
+
+def _current():
+    """This module as it is now (the newest code after a reload)."""
+    return sys.modules.get(__name__) or sys.modules[__spec__.name]
 
 
 def new_call(plan: dict, number: int) -> str:
@@ -47,13 +59,13 @@ def turn(call_id: str, text: str) -> dict:
         raise KeyError("unknown call")
     with call["turn_lock"]:
         if call["done"]:
-            return {"reply": "This report is already logged. Start a new call for another problem.",
-                    "done": True, "source": call["source"]}
+            return {"reply": "This call has ended. Start a new call for another problem.",
+                    "done": True, "logged": bool(call["ticket"]), "source": call["source"]}
         call["history"].append({"role": "user", "content": text})
         out = intake.intake_turn(call["history"], call["state"])
         call["history"].append({"role": "assistant", "content": out["reply"]})
         call.update(done=out["done"], source=out["source"])
-        if out["done"] and not call["ticket"]:
+        if out["logged"] and not call["ticket"]:
             call["ticket"] = intake.make_ticket(call["state"], call["plan"], call["n"])
         call["version"] += 1
         return out
@@ -91,15 +103,16 @@ class _Handler(BaseHTTPRequestHandler):
             if not text:
                 return self._send(400, b'{"error": "no text"}')
             try:
-                out = turn(str(body.get("call_id", "")), text)
+                out = _current().turn(str(body.get("call_id", "")), text)
             except KeyError:
                 return self._send(404, b'{"error": "unknown call"}')
             return self._send(200, json.dumps(out).encode())
         if self.path == "/tts":
-            audio = voice.speak(text) if text else None
+            v = _current().voice
+            audio = v.speak(text) if text else None
             if audio:
                 return self._send(200, audio, "audio/mpeg")
-            return self._send(503, json.dumps({"error": voice.last_error or "no text"}).encode())
+            return self._send(503, json.dumps({"error": v.last_error or "no text"}).encode())
         self._send(404, b'{"error": "not found"}')
 
 

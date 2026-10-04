@@ -32,7 +32,9 @@ CATEGORIES = [
      r"faded|road ?markings?|lane (?:lines?|markings?)|crosswalk (?:lines?|paint)|paint(?:ed)? lines?|lines are|traffic signs?"),
     ("Roads - Debris on Street/Sidewalk/Boulevard",
      r"debris|branch(?:es)?|tree (?:fell|down|limb)|fallen tree|rocks?|gravel|glass|mattress|couch|furniture|"
-     r"something (?:on|in) the road|blocking the (?:road|lane|sidewalk)|junk on the|dumped"),
+     r"something (?:on|in) the road|blocking the (?:road|lane|sidewalk)|junk on the|dumped|litter|"
+     r"(?:garbage|trash|junk|stuff|nails|wood|metal|tire|ladder|boxes?)\b.{0,20}\b(?:on|in|over|across|all over) "
+     r"the (?:road|street|lane|sidewalk|highway)"),
     ("WRS - New Service - Carts", r"new (?:cart|bin)|need (?:a|another) (?:cart|bin)|replacement (?:cart|bin)|"
                                   r"(?:cart|bin) (?:is )?(?:broken|cracked|stolen|missing)"),
     ("WRS - Commercial Collection Services", r"(?:business|commercial|store|restaurant|shop)\b.*\b(?:bin|garbage|dumpster|pickup|collection)|dumpster"),
@@ -169,14 +171,55 @@ GEOCODER = geocode  # tests swap this for an offline fake
 
 # --- the conversation ----------------------------------------------------------------
 
+OPENING = "Calgary 311, what problem would you like to report?"
+
+
 def new_state() -> dict:
     return {"service_name": None, "location_text": None, "lat": None, "lon": None, "where": None,
             "community": None, "precision": None, "details": [], "hazard_asked": False, "hazard_answered": False,
-            "emergency": False,
-            "failed_location": None}
+            "emergency": False, "failed_location": None, "last_question": OPENING, "unclear": 0, "ended": False,
+            "source": None}
 
 
-OPENING = "Calgary 311, what problem would you like to report?"
+# Things callers say that are about the conversation, not the problem. They're answered before any
+# address parsing, so "sorry, could you repeat that?" is never looked up on the map.
+_GREETING = re.compile(r"^(?:hi|hello|hey|hiya|good (?:morning|afternoon|evening))(?: there)?\W*(?:is this 311\W*)?$", re.I)
+_FILLER = re.compile(r"^(?:(?:hi|hello|hey|hiya|good (?:morning|afternoon|evening)|um+|uh+|erm|so|well|okay|ok|oh|"
+                     r"alright)\b[\s,.!]*)+", re.I)
+_REPEAT = re.compile(r"\b(?:repeat|say (?:that|it|again)|come again|pardon|didn'?t (?:catch|hear|get|understand)|"
+                     r"what did you (?:say|ask|mean)|what was (?:that|the question)|can'?t hear|couldn'?t hear|"
+                     r"hard to hear|one more time|missed (?:that|it|what)|don'?t understand|what do you mean)\b|"
+                     r"^(?:sorry|what|huh|pardon|excuse me|eh)\W*(?:what|sorry)?\W*$", re.I)
+_HEAR = re.compile(r"\b(?:can you hear me|are you there|you there|is anyone there)\b|^hello\W*\?+\W*$", re.I)
+_DONT_KNOW = re.compile(r"\b(?:i )?(?:don'?t|do not) know\b|\bnot sure\b|\bno idea\b|\bdunno\b|\bcan'?t remember\b|"
+                        r"\bno clue\b", re.I)
+_CANCEL = re.compile(r"\b(?:never ?mind|forget (?:about )?it|cancel(?: (?:it|that|the report))?|wrong number|"
+                     r"(?:good)?bye|hang(?:ing)? up|don'?t (?:want|need) to report)\b", re.I)
+_THANKS = re.compile(r"^(?:thanks?|thank you|ok(?:ay)?|cool|great|perfect|alright|got it)\W*"
+                     r"(?:thanks?|thank you)?\W*$", re.I)
+_WHEN = re.compile(r"\b(?:how long|when (?:will|are|is|can|do)|how soon|will (?:someone|they|you|a crew) (?:come|fix)|"
+                   r"is (?:someone|anyone|a crew) coming)\b", re.I)
+_WHO = re.compile(r"\b(?:who (?:is this|am i (?:talking|speaking) (?:to|with)|are you)|are you (?:a )?(?:robot|bot|real|"
+                  r"human|person|an ai|ai))\b", re.I)
+# a correction of something the agent already captured ("no, actually it's on 5 St")
+_CORRECTION = re.compile(r"\b(?:actually|i meant|correction|my mistake|not there|wrong)\b|^(?:no|nope|sorry)\b[\s,]+"
+                         r"(?:it'?s|its|it is|the|i said)\b", re.I)
+_WRONG_PLACE = re.compile(r"\b(?:wrong|not right|incorrect|that'?s not (?:it|right|correct|where)|not (?:there|that one))\b",
+                          re.I)
+# problems that exist but aren't road-crew work in this tool
+_OTHER_TEAM = re.compile(r"\b(?:street ?lights?|traffic lights?|signals?|water main|snow|ice|noise|graffiti|dogs?|"
+                         r"animals?|bylaw|parking ticket|taxes|bus|transit|power outage)\b", re.I)
+# landmark words, so "the superstore on sunridge" counts as a place even in lower case speech-to-text
+_PLACEY = re.compile(r"\b(?:centre|center|mall|park|school|station|plaza|hospital|library|arena|church|tower|"
+                     r"superstore|co-?op|safeway|walmart|costco|sobeys|tim hortons|mcdonald'?s|c-?train|lrt|bridge|"
+                     r"stadium|university|college|airport|community|building|apartments?|condos?|playground|"
+                     r"intersection|corner|exit|parkade|zoo|museum)\b", re.I)
+_CHATTY = re.compile(r"\b(?:you|your|could|would|please|why|how|sorry|think|mean|know|hear|said|say|tell|want|need|"
+                     r"help|repeat|again|understand|question|what)\b", re.I)
+_FILLER_WORDS = {"um", "umm", "uh", "uhh", "erm", "hmm", "yeah", "yes", "yep", "no", "okay", "ok", "so", "well", "like",
+                 "oh", "alright", "right", "and", "the", "it", "it's", "its", "is", "there", "here", "just", "a", "i",
+                 "mean", "hold", "on", "wait", "one", "sec", "second", "let", "me", "see", "think"}
+_YES_NO = re.compile(r"^(?:yes|yeah|yep|yup|no|nope|nah|i don'?t know|not sure|maybe|kind of|sort of)\b", re.I)
 
 
 def classify(text: str) -> str | None:
@@ -188,16 +231,29 @@ def classify(text: str) -> str | None:
     return None
 
 
+def _looks_like_place(phrase: str) -> bool:
+    """Worth a map lookup: a number, a street word or a landmark word, or a short name with no chit-chat in it."""
+    words = re.findall(r"[a-z0-9']+", phrase.lower())
+    if not words or _VAGUE.match(phrase) or len(words) > 12 or all(w in _FILLER_WORDS for w in words):
+        return False
+    if re.search(r"\d", phrase) or _STREETY.search(phrase) or _PLACEY.search(phrase):
+        return True
+    return len(phrase.split()) <= 4 and not _CHATTY.search(phrase) and not _YES_NO.match(phrase)
+
+
 def find_location(text: str, expecting: bool) -> str | None:
     """A location phrase in the caller's words, or None. expecting: we just asked 'where?'."""
     for m in _LOCATION_CUE.finditer(text):
         phrase = m.group(1).strip(" ,")
-        if phrase and not _VAGUE.match(phrase) and (_STREETY.search(phrase) or re.search(r"[A-Z]", phrase)):
+        if phrase and not _VAGUE.match(phrase) and (_STREETY.search(phrase) or _PLACEY.search(phrase)
+                                                     or re.search(r"[A-Z]", phrase)):
             return phrase
-    stripped = text.strip(" .!?")
-    if (expecting and stripped and not _VAGUE.match(stripped) and len(stripped.split()) <= 10
-            and not re.match(r"(?:yes|yeah|yep|no|nope|nah|i don'?t know|not sure)", stripped, re.I)):
-        return re.sub(r"^(?:it'?s|its|it is|i'?m|im|i am|uh|um|yeah|ok(?:ay)?|so)[,\s]+", "", stripped, flags=re.I)
+    stripped = _FILLER.sub("", text.strip(" .!?"))
+    if expecting:
+        phrase = re.sub(r"^(?:it'?s|its|it is|i'?m|im|i am|yeah|so|um|uh)[,\s]+", "", stripped, flags=re.I)
+        phrase = re.sub(r"^(?:at|on|near|by)\s+", "", phrase, flags=re.I)
+        if _looks_like_place(phrase):
+            return phrase
     if _STREETY.search(text) and re.search(r"\d", text):
         return stripped
     return None
@@ -211,6 +267,11 @@ def _located(state: dict) -> bool:
     return state["lat"] is not None
 
 
+def _clear_location(state: dict) -> None:
+    state.update(location_text=None, lat=None, lon=None, where=None, community=None, precision=None,
+                 failed_location=None, hazard_asked=False, hazard_answered=False)
+
+
 def _apply_location(state: dict, phrase: str) -> None:
     hit = GEOCODER(phrase)
     if hit:
@@ -221,9 +282,21 @@ def _apply_location(state: dict, phrase: str) -> None:
         state["failed_location"] = phrase
 
 
-def _ready(state: dict) -> bool:
+def ready(state: dict) -> bool:
+    """Enough to log a ticket: what, where, and (for safety types) whether it's a hazard now."""
     safety = state["service_name"] in SAFETY_TYPES
     return bool(state["service_name"] and _located(state) and (state["hazard_answered"] or not safety))
+
+
+_ready = ready
+
+
+def _stage(state: dict) -> str:
+    if not state["service_name"]:
+        return "what"
+    if not _located(state):
+        return "where"
+    return "hazard"
 
 
 def _next_question(state: dict) -> str:
@@ -233,10 +306,12 @@ def _next_question(state: dict) -> str:
                 "road, or a missed garbage pickup.")
     what = _short(state["service_name"])
     if not _located(state):
-        if state["failed_location"]:
-            return (f"I couldn't find “{state['failed_location']}” on the map. What's the nearest street "
-                    f"address, cross street (like 17 Ave and 4 St SW), or landmark?")
-        return (f"Where exactly is the {what}? A street address, the nearest cross street, or a landmark all work.")
+        failed = state["failed_location"]
+        if failed:
+            said = f"“{failed}”" if len(failed.split()) <= 6 else "that place"
+            return (f"I couldn't find {said} on the map. What's the nearest street address, cross street "
+                    f"(like 17 Ave and 4 St SW), or a landmark you can see?")
+        return f"Where exactly is the {what}? A street address, the nearest cross street, or a landmark all work."
     state["hazard_asked"] = True
     return (f"Got it, {state['where']}. Is the {what} causing a hazard right now, for example in a driving lane "
             f"or a crosswalk?")
@@ -248,36 +323,127 @@ def _final_reply(state: dict) -> str:
             f"A Roads supervisor will see it on today's board. Thanks for calling.")
 
 
+def _has_substance(text: str, state: dict) -> bool:
+    """The caller told us something about the problem (a type or a place), not just about the call."""
+    return bool(classify(text) or find_location(text, expecting=False)
+                or (_stage(state) == "where" and _looks_like_place(_FILLER.sub("", text.strip(" .!?")))
+                    and not (_REPEAT.search(text) or _HEAR.search(text) or _CANCEL.search(text))))
+
+
+def meta_reply(text: str, state: dict) -> str | None:
+    """Answer remarks about the call itself (repeat that, can you hear me, hi, who is this, never mind).
+
+    None when the caller said something about the problem; then the normal turn handles it.
+    """
+    if _has_substance(text, state):
+        return None
+    last, stage = state["last_question"], _stage(state)
+    raw = text.strip()
+    text = _FILLER.sub("", raw).strip() or raw  # "uh, what?" -> "what?"
+    if _HEAR.search(raw) and not _GREETING.match(raw):
+        return f"Yes, I can hear you. {last}"
+    if _GREETING.match(raw):
+        return f"Hi there, I can hear you. {last}"
+    if _CANCEL.search(text):
+        state["ended"] = True
+        return "Okay, I won't log anything. If you see a problem later, call 311 anytime. Goodbye."
+    if _REPEAT.search(text):
+        return f"Sure. {last}"
+    if _WHO.search(text):
+        return f"I'm the City of Calgary's automated 311 call-taker. {last}"
+    if _WHEN.search(text):
+        return (f"Crews are scheduled by priority, and safety problems go first. I just need a couple of details "
+                f"so a supervisor can place it. {last}")
+    if _THANKS.match(text.strip()):
+        return last
+    if _DONT_KNOW.search(text) and stage != "hazard":
+        if stage == "where":
+            return ("No problem. What's the closest street name you can see, or a store, school or park "
+                    "nearby? I can work from that.")
+        return ("No problem. Just describe what you're seeing, for example a hole in the road, a sign that's "
+                "down, or something blocking the street.")
+    return None
+
+
 def rules_turn(history: list[dict], state: dict) -> str:
     """Rule-based call-taker: classify, locate, then ask for the next missing piece."""
     text = history[-1]["content"]
-    asked_where = state["service_name"] and not _located(state)
-    if state["hazard_asked"]:
-        state["hazard_answered"] = True  # whatever they said answers "is it a hazard right now?"
+    stage = _stage(state)
     state["details"].append(text)
     if _EMERGENCY.search(text):
         state["emergency"] = True
+
+    new_type = classify(text)
+    ack = ""
     if not state["service_name"]:
-        state["service_name"] = classify(text)
-    if not _located(state):
-        phrase = find_location(text, expecting=bool(asked_where))
+        state["service_name"] = new_type
+        if new_type:
+            ack = f"Okay, a {_short(new_type)}. " if stage == "what" and len(history) > 2 else ""
+    elif new_type and new_type != state["service_name"] and _CORRECTION.search(text):
+        safety_changed = (new_type in SAFETY_TYPES) != (state["service_name"] in SAFETY_TYPES)
+        state["service_name"] = new_type
+        if safety_changed:
+            state.update(hazard_asked=False, hazard_answered=False)
+        ack = f"Got it, a {_short(new_type)}, not what I had. "
+
+    if _located(state):
+        phrase = find_location(text, expecting=False)
+        if phrase and phrase != state["location_text"] and _CORRECTION.search(text):
+            old = state["where"]
+            _clear_location(state)
+            _apply_location(state, phrase)
+            if not _located(state):
+                ack = f"Sorry, I had {old}. "
+        elif stage == "hazard" and _WRONG_PLACE.search(text) and not phrase:
+            old = state["where"]
+            _clear_location(state)
+            state["details"].pop()
+            return f"Sorry about that, I had {old}. What's the nearest cross street or street address?"
+        elif state["hazard_asked"]:
+            state["hazard_answered"] = True  # whatever they said answers "is it a hazard right now?"
+    else:
+        phrase = find_location(text, expecting=stage == "where")
         if phrase:
             _apply_location(state, phrase)
-    if _ready(state):
+        elif stage == "where" and not new_type:
+            state["details"].pop()  # nothing usable in it
+            return ("Sorry, I didn't catch a location there. What's the nearest street address, cross street, "
+                    "or a landmark you can see?")
+
+    if ready(state):
         return _final_reply(state)
-    return _next_question(state)
+    if not state["service_name"]:
+        if _located(state):  # they said where before what
+            return (f"Got it, {state['where']}. And what's the problem there? For example a pothole, a damaged "
+                    f"sign, or debris on the road.")
+        state["unclear"] += 1
+        state["details"].pop()
+        if re.search(r"\b(?:report|problem|issue|complain\w*|calling)\b", text, re.I) and state["unclear"] == 1:
+            return "Sure. " + _next_question(state)  # "hi, I want to report something"
+        if _OTHER_TEAM.search(text):
+            return ("That one goes to a different City team, so I can't send a road crew for it from here. Is there "
+                    "a road or waste problem, like a pothole, a damaged sign, or debris, that I can log for you?")
+        if state["unclear"] >= 2:
+            return ("I can log potholes, missing or damaged signs, faded road markings, debris on the road, and "
+                    "garbage, recycling or compost problems. Which of those is closest to what you're seeing?")
+        return ("Sorry, I didn't quite catch the problem. Is it a pothole, a missing or damaged sign, debris on "
+                "the road, or a missed garbage pickup?")
+    return ack + _next_question(state)
 
 
 _INTAKE_SYSTEM = (
-    "You are a calm, friendly City of Calgary 311 call-taker. A caller is reporting a road or waste problem. "
-    "Your job is to collect three things, asking ONE short question at a time (under 25 words): what the problem "
-    "is, exactly where it is (a street address, cross street, or landmark that can be found on a map; 'here' or "
-    "'where I am' is not enough, so ask for the nearest cross street), and for potholes and missing or damaged "
-    "signs whether it is a hazard right now. Do not ask for anything else (no names, no phone numbers). If "
-    "anyone is hurt or in danger, tell them to hang up and call 911 first.\n"
+    "You are a calm, friendly City of Calgary 311 call-taker on a phone call. A caller is reporting a road or "
+    "waste problem. Your job is to collect three things, asking ONE short question at a time (under 25 words): "
+    "what the problem is, exactly where it is (a street address, cross street, or landmark that can be found on a "
+    "map; 'here' or 'where I am' is not enough, so ask for the nearest cross street), and for potholes and missing "
+    "or damaged signs whether it is a hazard right now. Do not ask for anything else (no names, no phone numbers). "
+    "If anyone is hurt or in danger, tell them to hang up and call 911 first. Talk like a person: if the caller "
+    "asks you to repeat, didn't hear, or asks a question, answer it briefly and then repeat your question. Speech "
+    "to text may garble words, so if a reply makes no sense, ask again politely.\n"
     "Return JSON: reply (what you say next), service_name (one of the allowed types, or null if not yet "
-    "clear), location (the caller's location words, in full, or null), hazard_answered (true once the caller "
-    "has said whether it is a hazard now), emergency (true if someone is hurt or in danger).\n"
+    "clear), location (ONLY words the caller used to name a place, in full; null if this message names no place, "
+    "for example when they ask you to repeat), hazard_answered (true once the caller has said whether it is a "
+    "hazard now), emergency (true if someone is hurt or in danger).\n"
     "Allowed service_name values: " + "; ".join(name for name, _ in CATEGORIES) + "."
 )
 _INTAKE_FORMAT = {
@@ -311,9 +477,9 @@ def claude_turn(history: list[dict], state: dict) -> str:
     if out.get("service_name") in WEIGHTS and WEIGHTS[out["service_name"]] > 0:
         state["service_name"] = out["service_name"]
     loc = (out.get("location") or "").strip()
-    if loc and loc != state["location_text"] and not _VAGUE.match(loc):
+    if loc and loc != state["location_text"] and _looks_like_place(loc):
         _apply_location(state, loc)
-    if _ready(state):
+    if ready(state):
         return _final_reply(state)
     if state["failed_location"] or (state["service_name"] and _located(state) and not state["hazard_answered"]):
         return _next_question(state)  # code knows the map lookup result; say it the same way every time
@@ -323,22 +489,30 @@ def claude_turn(history: list[dict], state: dict) -> str:
 def intake_turn(history: list[dict], state: dict) -> dict:
     """One caller message in, the call-taker's reply out. history ends with the caller's message.
 
-    Returns {"reply", "done", "source"}; state is updated in place.
+    Returns {"reply", "done", "logged", "source"}; state is updated in place. done is True once the report
+    is logged or the caller hung up (logged tells the two apart).
     """
-    source = "rules"
-    if llm.USE_LLM and llm.has_api_key():
-        try:
-            reply = claude_turn(history, state)
-            source = "claude"
-        except Exception as e:
-            log.info("intake fell back to rules: %s: %s", type(e).__name__, e)
-            reply = rules_turn(history, state)
-    else:
-        reply = rules_turn(history, state)
+    text = history[-1]["content"].strip()
+    reply = meta_reply(text, state)
+    source = state["source"] or ("claude" if llm.USE_LLM and llm.has_api_key() else "rules")
+    asked = reply is None  # a real turn asks the next question; meta replies only re-say it
+    if reply is None:
+        if llm.USE_LLM and llm.has_api_key():
+            try:
+                reply, source = claude_turn(history, state), "claude"
+            except Exception as e:
+                log.info("intake fell back to rules: %s: %s", type(e).__name__, e)
+                reply, source = rules_turn(history, state), "rules"
+        else:
+            reply, source = rules_turn(history, state), "rules"
+        state["source"] = source
+    logged = ready(state)
+    if asked and not logged:
+        state["last_question"] = reply  # what "say that again" repeats
     if state["emergency"] and not reply.lower().startswith("if anyone"):
         reply = "If anyone is hurt or in danger, please hang up and call 911. " + reply
         state["emergency"] = False  # say it once
-    return {"reply": reply, "done": _ready(state), "source": source}
+    return {"reply": reply, "done": logged or state["ended"], "logged": logged, "source": source}
 
 
 # --- the ticket -------------------------------------------------------------------------------

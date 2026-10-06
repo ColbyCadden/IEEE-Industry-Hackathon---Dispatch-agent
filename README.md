@@ -1,64 +1,50 @@
-# City Link — who should 311 send next? A dispatch agent for Calgary Roads
+# City Link — who should 311 send next?
 
-IEEE YP Industry Hackathon · Software and Computational Math · Case 1 ([case brief](docs/CASE_BRIEF.md))
+A dispatch agent for Calgary Roads. IEEE YP Industry Hackathon · Software and Computational Math · Case 1 ([case brief](docs/CASE_BRIEF.md))
 
 **Demo video:** https://youtu.be/U1Zz6N5E05M
 
-Oldest-first (FIFO) dispatch is fair to the queue, not to the public: a missing stop sign waits
-behind yesterday's parking complaint. This agent scores open 311 tickets by hazard, assigns a day
-of work to 8 crews (32 workers, sized by workload), and replans when a crew calls in sick. It then tells the Roads
-supervisor what changed, in plain English.
+Today, 311 crews work oldest-first, so a missing stop sign can wait behind yesterday's parking
+complaint. City Link ranks open tickets by how dangerous they are, plans the day for 8 crews, and
+replans in seconds when something changes. Supervisors can type an update or just talk to it on a
+**voice call powered by [ElevenLabs](https://elevenlabs.io)**.
 
-Supervisors can type an update, or report it hands-free on a **voice call powered by
-[ElevenLabs](https://elevenlabs.io)**: ElevenLabs Scribe transcribes what they say, Claude reads it, the agent
-asks out loud for anything it's missing, and the reply is spoken in an ElevenLabs Eleven v4 voice.
+## Results
 
-## Results (frozen sample, same 8 crews and 32 workers for both plans)
+Same 8 crews and 32 workers for both plans, on a frozen sample of Calgary 311 data.
 
-| 8 crews, 32 workers | Oldest-first (FIFO, 8 × 5) | Agent, 8 a.m. | Agent, noon (crew 4 out) |
+| | Oldest-first | City Link, 8 a.m. | City Link, crew 4 out |
 |---|---|---|---|
-| Safety tickets covered (30 in the backlog) | 16 | **30** | **30** |
-| Total priority P served | 99.0 | **140.75** | 130.0 |
+| Safety hazards covered (of 30) | 16 | **30** | **30** |
 | Jobs on the plan | 40 | **48** | 42 |
-| Moved to another crew / dropped | — | — | 6 / 6 (**0 safety dropped**) |
+| Total priority served | 99.0 | **140.75** | 130.0 |
+| Jobs moved / deferred | — | — | 6 / 6, **0 safety dropped** |
 
-- **Data:** 200 raw tickets → 122 open → 104 after merging duplicate reports → 99 field-crew
-  tickets (licence inspections and seniors' inquiries aren't field-crew work).
-- **Robustness:** we changed every type weight by ±1 (16 variations). The agent beat FIFO on
-  safety in all 16, by +12 to +15 tickets (`python -m tests.sensitivity`).
-- **Compact crews:** each crew gets one tight cluster of jobs, grouped to minimise driving, then
-  a clean-up pass swaps or moves jobs between crews until no swap would shorten anyone's drive.
-  Straight-line driving fell from 4.2 km to 2.8 km per job, and no crew's jobs are more than
-  13 km apart (it was 27 km).
-- **Flexible crews:** the same 32 workers are split by workload (3 to 6 per crew today), and a
-  crew's job limit follows its size plus its short hops (jobs within 1 km of each other), up to
-  7 jobs. The agent covers 48 jobs instead of 40 with the same people, keeps all 30 safety
-  tickets, and losing any one crew drops no safety ticket in any of the 8 possible cases
-  (19 dropped in total under the original zones). Oldest-first keeps standard crews (4 people, 5 jobs).
-- **Improvement round:** the first replan let a displaced job bump work anywhere in the city
-  (one job travelled 34.9 km). Moves are now limited to the 4 nearest crews, and the crew-4
-  replan still drops no safety ticket.
-- **Starter bug we caught:** the starter's `"ice" in name` check matches "Serv**ice**s" and
-  "L**ice**nce". Its "priority" plan spent 28 of 40 slots on cart deliveries, commercial
-  collection and licence inspections, and scheduled 23 already-closed tickets.
+- **Robust:** we changed every hazard weight up and down (16 versions). City Link beat
+  oldest-first on safety every time, by 12 to 15 tickets.
+- **Less driving:** each crew gets a tight cluster of nearby jobs. Driving fell from 4.2 km to
+  2.8 km per job.
+- **Crews sized by workload:** the same 32 workers are split 3 to 6 per crew, so City Link fits
+  48 jobs instead of 40.
+- **Starter bug we caught:** the starter's `"ice" in name` check matched "Serv**ice**s" and
+  "L**ice**nce", so its "priority" plan was mostly cart deliveries and licence inspections.
 
 ## Screenshots
 
-The dashboard on the frozen sample, with Claude reading updates and the ElevenLabs voice call available.
-
-**1. The 8 a.m. plan.** Eight crews, 48 jobs, 30 safety tickets. Colour = crew, large dot = safety ticket. Claude writes the morning briefing under the map.
+**The 8 a.m. plan.** Colour = crew, large dot = safety hazard. Claude writes the morning briefing.
 
 ![8 a.m. plan on the map](docs/screenshots/01_8am_plan_map.png)
 
-**2. One crew's day.** Click a crew to focus the map on it and see its jobs in priority order (priority out of 10).
+**One crew's day.** Click a crew to see its jobs in priority order.
 
 ![Crew 2 selected: its five jobs in priority order](docs/screenshots/02_crew_selected.png)
 
-**3. Agent vs oldest-first (FIFO).** 30 safety tickets covered against 16, with the improvement round: baseline, our plan, and the plan after crew 4 calls in sick.
+**City Link vs oldest-first.** 30 safety hazards covered against 16.
 
 ![Agent vs FIFO comparison and improvement round](docs/screenshots/03_fifo_vs_agent.png)
 
-**4. A sick call, replanned.** "hey, crew 4 here, we're all out sick today, can't make it" is read by Claude and applied straight away: crew 4's jobs move to nearby crews (42 jobs on the plan, 6 moved, 6 lower-priority deferred, 0 safety dropped), with a new briefing for the supervisor.
+**A sick call.** "hey, crew 4 here, we're all out sick today, can't make it" is replanned at once:
+6 jobs move to nearby crews, 6 low-priority jobs wait, and no safety job is dropped.
 
 ![Noon plan after crew 4 calls in sick](docs/screenshots/04_noon_plan_after_sick_call.png)
 
@@ -66,40 +52,42 @@ The dashboard on the frozen sample, with Claude reading updates and the ElevenLa
 
 ```mermaid
 flowchart LR
-  A[311 CSV<br/>frozen sample] --> B[Clean<br/>drop Closed,<br/>merge duplicates]
-  B --> C[Score<br/>P = weight + 0.25·days + 0.5·extra reports]
-  C --> D[Compact crews<br/>8 tight groups of 5,<br/>least driving]
-  D --> E[Assign<br/>priority order vs FIFO,<br/>same fill function]
-  E --> F[8 a.m. plan + briefing]
-  G[Crew update, typed] --> H[Parse<br/>Claude, regex fallback]
-  V[Voice call<br/>ElevenLabs Scribe<br/>speech-to-text] --> H
-  H --> I[Ask for anything missing,<br/>then apply at once]
-  I --> J[Replan<br/>bump lowest-P job,<br/>4 nearest crews only]
+  A[311 tickets] --> B[Clean<br/>drop closed,<br/>merge duplicates]
+  B --> C[Score priority]
+  C --> D[Assign to crews<br/>tight clusters]
+  D --> F[8 a.m. plan + briefing]
+  G[Typed update] --> H[Claude reads it]
+  V[Voice call<br/>ElevenLabs Scribe] --> H
+  H --> J[Replan]
   F --> J
-  J --> K[Noon plan + briefing<br/>moved / dropped counts]
+  J --> K[New plan + briefing]
   J --> S[Spoken reply<br/>ElevenLabs Eleven v4]
 ```
 
-| Step | File | What it does |
-|---|---|---|
-| Clean | `dispatch/data_prep.py` | Loads the CSV, drops Closed tickets, merges duplicate reports (same type, same spot to ~1 m) into one job with a `reports` count |
-| Weights | `dispatch/weights.py` | One reviewable table: 3 = safety hazard, 2 = road hazard, 1 = service, 0 = not a field-crew job; a reason for every weight |
-| Score | `dispatch/scoring.py` | P = weight + 0.25 × days open + 0.5 × (reports − 1) |
-| Assign | `dispatch/assign.py` | Takes the top 40 tickets in priority or FIFO order and splits them into 8 compact groups that minimise driving (capacitated k-means with optimal Hungarian assignment, seeded). For the agent, the 32 workers are then split by workload and each crew's job limit follows its size and short hops (max 7), filled with the next tickets nearby (cheapest detour). A clean-up pass then moves or swaps jobs between crews while that shortens total driving. Jobs are listed in driving order |
-| Replan | `dispatch/replan.py` | Removes the sick crew's jobs; each one, highest P first, may bump a strictly lower-P job from one of its 4 nearest crews; logs moved/dropped |
-| Metrics | `dispatch/metrics.py` | P served, safety count, jobs, moved, dropped, safety dropped |
-| Language | `dispatch/llm.py` | Claude turns a free-text sick call into a structured event and writes the briefings; regex and template fallbacks run without a key or network |
-| Voice (ElevenLabs) | `dispatch/voice.py` | ElevenLabs **Scribe v2** speech-to-text turns each spoken turn into text (spoken addresses become "17 Ave SW" so the map lookup finds them); the ElevenLabs **Eleven v4** voice speaks the agent's replies, streamed through a small local relay so playback starts in about 0.6 s and the API key never reaches the browser |
-| Voice call | `dispatch/call.py`, `dispatch/call_widget.js` | The hands-free call in the Report an update box: the widget listens until the supervisor pauses, the dialogue asks only for what's missing (which crew, or where a new job is), enters the update as soon as it's clear, and handles "undo" and "no, it was crew 3" |
-| Pipeline | `dispatch/run.py` | Runs everything; writes `dispatch/outputs/*.json`, including the 8 a.m. and noon briefings |
-| 3D downtown | `dispatch/sim3d.py`, `simulation/calgary3d/web/plan_pins.js` | Analysis tab: Semir's live SUMO 3D sim of downtown, with today's downtown jobs as pins in each crew's colour (Start the 3D sim button, needs SUMO from `simulation/setup.bat`) |
-| System diagram | `dispatch/flow.mmd` | Analysis tab: how the pieces fit together (Mermaid) |
-| Dashboard | `dispatch/app.py` | Streamlit, three tabs. **Dispatch**: today's plan, map, crews and the update → replan loop (typed, or on an ElevenLabs voice call). **Briefings**: the 8 a.m. briefing, one briefing per update, and an end-of-day overview. **Analysis**: agent vs FIFO on safety coverage, priority per crew and travel |
+1. **Clean.** Drop closed tickets and merge duplicate reports of the same problem.
+2. **Score.** Priority = hazard weight (0–3) + 0.25 per day waiting + 0.5 per extra report.
+   Potholes and missing or damaged signs are the top weight.
+3. **Assign.** Take the top tickets and group them into 8 tight clusters with the Hungarian
+   algorithm, so crews drive less.
+4. **Update.** A supervisor types or says what changed ("crew 4 is out sick"). Claude reads it;
+   on a voice call, ElevenLabs Scribe turns speech into text first, and the agent asks out loud for
+   anything missing.
+5. **Replan.** The lost crew's jobs move to the nearest crews, bumping lower-priority work if
+   needed. A new briefing explains what changed, and on a call the reply is spoken in an
+   ElevenLabs Eleven v4 voice.
 
-The planning is deterministic code. Claude only reads the supervisor's message and writes the
-briefing from numbers the code computed; ElevenLabs only handles the voice (speech in, speech
-out). Every update shows what was understood and who read it (Claude or the rules), and **Undo**
-(or saying "undo" on a call) takes it back.
+The planning is plain code. Claude only reads messages and writes briefings; ElevenLabs only
+handles the voice. Every update can be undone.
+
+| File | What it does |
+|---|---|
+| `dispatch/data_prep.py`, `weights.py`, `scoring.py` | Clean the data and score each ticket |
+| `dispatch/assign.py`, `replan.py`, `metrics.py` | Build the crew plan, replan, count the results |
+| `dispatch/llm.py` | Claude: reads updates, writes briefings (rule-based backup without a key) |
+| `dispatch/voice.py` | ElevenLabs: speech-to-text in, spoken replies out |
+| `dispatch/call.py`, `call_widget.js` | The voice call: listening, follow-up questions, undo |
+| `dispatch/app.py` | The Streamlit dashboard: Dispatch, Briefings and Analysis tabs |
+| `dispatch/sim3d.py` | Semir's 3D downtown traffic sim with today's jobs as pins |
 
 ## Run it
 
@@ -107,61 +95,41 @@ Python 3.10 or newer.
 
 ```bash
 pip install -r requirements.txt
-python -m dispatch.run                    # rebuild the plans and outputs; prints both briefings
 python -m streamlit run dispatch/app.py   # dashboard at http://localhost:8501
-python -m tests.test_core                 # 11 checks, including the numbers above
-python -m tests.sensitivity               # the ±1 weight table
-python -m tests.test_call                 # the voice call dialogue (no audio or key needed)
-python -m tests.test_voice                # the ElevenLabs calls, faked (no network or key needed)
+python -m dispatch.run                    # rebuild the plans (optional, outputs are committed)
+python -m tests.test_core                 # checks, including the numbers above
 ```
 
-The output files are committed, so the dashboard also works without running the pipeline first.
+More tests: `tests.sensitivity` (weights), `tests.test_call` and `tests.test_voice` (voice call).
 
-**Claude (optional).** Copy `.env.example` to `.env` and put your key after `ANTHROPIC_API_KEY=`.
-`.env` is gitignored. Without a key, or without internet, the app uses the rule-based parser,
-and template briefings, and labels them as such on screen. Check the key with
-`python -c "from dispatch.llm import has_api_key; print(has_api_key())"`.
+**API keys (optional).** Copy `.env.example` to `.env` and add:
 
-**ElevenLabs voice call (optional).** Put your ElevenLabs key after `ELEVENLABS_API_KEY=` in the
-same `.env` (the key needs Text to Speech and Speech to Text access; `ELEVENLABS_VOICE_ID` picks a
-different voice). A purple **ElevenLabs** badge and a **Start voice call** button then appear in
-the Report an update box. Allow the microphone when the browser asks; it works on
-`http://localhost:8501`, not on a network address. Without the key the button is hidden and typing
-works as before.
+- `ANTHROPIC_API_KEY` for Claude. Without it, a rule-based parser and template briefings take over.
+- `ELEVENLABS_API_KEY` for the voice call (needs Text to Speech and Speech to Text access). A
+  **Start voice call** button appears. Allow the microphone; it only works on `localhost`.
 
-**Briefings.** The Briefings tab shows the 8 a.m. briefing, then a short briefing after every crew
-change or new job, each timestamped. **Close out the day** consolidates them into one end-of-day
-overview, and **Download today's briefings** saves the full set as a text file.
+`.env` is gitignored, so your keys stay on your machine.
 
-## Limits (what this does not do)
+## Limits
 
-- **Frozen data.** A 200-ticket Open Calgary 311 sample (Aug 25–27, 2026), planned as of Aug 28,
-  2026. Nothing is live.
-- **No street addresses.** The address column in the source is empty. A job's location is its
-  latitude/longitude and community name.
-- **No routing.** Jobs are assigned to crews, not sequenced into routes. Distance is straight
-  line to a crew's zone centre. Street routing is Case 2.
-- **Every job is assumed to take the same time.** There are no crew skills or equipment.
-- **Crew changes and new jobs only.** Updates stack through the day (each one builds on the
-  last, and Undo takes the latest back), but a city-wide event such as a blizzard is not
-  implemented.
-- **The voice call takes turns.** The agent doesn't listen while it's speaking, so you can't
-  interrupt it, and a reply starts about 2–3 s after you stop talking (longer for a new job,
-  which goes through Claude and an address lookup). English only; a quiet room or headset works best.
-- **Weights are our judgement,** not City policy. The sensitivity test shows the result doesn't
-  hinge on any single weight.
-- **FIFO here ignores type for ordering,** but draws from the same 99 field-crew tickets as the
-  agent, so both plans pick from the same eligible work.
+- **Frozen data.** A 200-ticket Calgary 311 sample from Aug 25–27, 2026. Nothing is live.
+- **No routes.** Jobs are grouped by crew, not turned into driving directions.
+- **Every job takes the same time,** and there are no crew skills or equipment.
+- **Crew changes and new jobs only.** Updates stack through the day; city-wide events like a
+  blizzard aren't handled.
+- **The voice call takes turns.** You can't interrupt it, replies take 2–3 s, and it's English
+  only. A quiet room or headset works best.
+- **The weights are our judgement,** not City policy, though the result holds when they change.
 
 ## Repo layout
 
 | Path | Contents |
 |---|---|
-| `dispatch/` | The pipeline and dashboard above; `outputs/` holds the generated plans and briefings |
-| `tests/` | `test_core.py` (sanity checks and verified numbers), `sensitivity.py` (weight robustness), `test_call.py` and `test_voice.py` (the ElevenLabs voice call) |
-| `data/` | The 311 sample and its source notes |
-| `docs/` | Case brief, pitch outline, submission draft |
-| `agent_starter.py` | The organizers' starter, kept unmodified for reference (it contains the "ice" bug above) |
-| `simulation/` | A separate teammate prototype (SUMO traffic simulation and 3D city view). It is not part of the dispatch pipeline above and has its own README |
+| `dispatch/` | The planner and dashboard; `outputs/` holds the generated plans |
+| `tests/` | Checks for the numbers, the weights and the voice call |
+| `data/` | The 311 sample |
+| `docs/` | Case brief, pitch and submission |
+| `agent_starter.py` | The organizers' starter, unchanged (it has the "ice" bug) |
+| `simulation/` | Semir's SUMO traffic simulation and 3D city, with its own README |
 
 Data: The City of Calgary, Open Calgary — 311 Service Requests, Open Government Licence – City of Calgary.

@@ -41,7 +41,9 @@ not one damaged sign. We wanted a dispatcher that a Roads supervisor could actua
 
 A deterministic Python pipeline (pandas, NumPy, SciPy) does the planning. Claude (Anthropic API)
 handles language: it reads the supervisor's free-text crew update and writes the briefings. A
-Streamlit dashboard ties them together. Without an API key or network, a rule-based parser and
+Streamlit dashboard ties them together. ElevenLabs handles voice: on a hands-free call, ElevenLabs
+Scribe transcribes the supervisor, the agent asks for anything it's missing, and its replies are
+spoken in an ElevenLabs Eleven v4 voice. Without an API key or network, a rule-based parser and
 template briefings take over, and the dashboard labels which one answered.
 
 1. **Clean.** We load the 311 sample and drop closed tickets. Duplicate reports of the same
@@ -125,7 +127,7 @@ Driving: compact crews cut straight-line driving from 4.2 km to 2.8 km per job.
 
 ## Built with
 
-Python · pandas · NumPy · SciPy · Anthropic Claude API · Streamlit · Calgary 311 open data
+Python · pandas · NumPy · SciPy · Anthropic Claude API · ElevenLabs (Scribe v2 speech-to-text, Eleven v4 voice) · Streamlit · Calgary 311 open data
 
 **TODO:** add the repo link and team member names.
 

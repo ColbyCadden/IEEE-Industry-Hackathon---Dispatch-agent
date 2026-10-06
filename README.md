@@ -9,6 +9,10 @@ behind yesterday's parking complaint. This agent scores open 311 tickets by haza
 of work to 8 crews (32 workers, sized by workload), and replans when a crew calls in sick. It then tells the Roads
 supervisor what changed, in plain English.
 
+Supervisors can type an update, or report it hands-free on a **voice call powered by
+[ElevenLabs](https://elevenlabs.io)**: ElevenLabs Scribe transcribes what they say, Claude reads it, the agent
+asks out loud for anything it's missing, and the reply is spoken in an ElevenLabs Eleven v4 voice.
+
 ## Results (frozen sample, same 8 crews and 32 workers for both plans)
 
 | 8 crews, 32 workers | Oldest-first (FIFO, 8 × 5) | Agent, 8 a.m. | Agent, noon (crew 4 out) |
@@ -67,11 +71,13 @@ flowchart LR
   C --> D[Compact crews<br/>8 tight groups of 5,<br/>least driving]
   D --> E[Assign<br/>priority order vs FIFO,<br/>same fill function]
   E --> F[8 a.m. plan + briefing]
-  G[Sick call, free text] --> H[Parse<br/>Claude, regex fallback]
-  H --> I[Supervisor confirms]
+  G[Crew update, typed] --> H[Parse<br/>Claude, regex fallback]
+  V[Voice call<br/>ElevenLabs Scribe<br/>speech-to-text] --> H
+  H --> I[Ask for anything missing,<br/>then apply at once]
   I --> J[Replan<br/>bump lowest-P job,<br/>4 nearest crews only]
   F --> J
   J --> K[Noon plan + briefing<br/>moved / dropped counts]
+  J --> S[Spoken reply<br/>ElevenLabs Eleven v4]
 ```
 
 | Step | File | What it does |
@@ -83,14 +89,17 @@ flowchart LR
 | Replan | `dispatch/replan.py` | Removes the sick crew's jobs; each one, highest P first, may bump a strictly lower-P job from one of its 4 nearest crews; logs moved/dropped |
 | Metrics | `dispatch/metrics.py` | P served, safety count, jobs, moved, dropped, safety dropped |
 | Language | `dispatch/llm.py` | Claude turns a free-text sick call into a structured event and writes the briefings; regex and template fallbacks run without a key or network |
+| Voice (ElevenLabs) | `dispatch/voice.py` | ElevenLabs **Scribe v2** speech-to-text turns each spoken turn into text (spoken addresses become "17 Ave SW" so the map lookup finds them); the ElevenLabs **Eleven v4** voice speaks the agent's replies, streamed through a small local relay so playback starts in about 0.6 s and the API key never reaches the browser |
+| Voice call | `dispatch/call.py`, `dispatch/call_widget.js` | The hands-free call in the Report an update box: the widget listens until the supervisor pauses, the dialogue asks only for what's missing (which crew, or where a new job is), enters the update as soon as it's clear, and handles "undo" and "no, it was crew 3" |
 | Pipeline | `dispatch/run.py` | Runs everything; writes `dispatch/outputs/*.json`, including the 8 a.m. and noon briefings |
 | 3D downtown | `dispatch/sim3d.py`, `simulation/calgary3d/web/plan_pins.js` | Analysis tab: Semir's live SUMO 3D sim of downtown, with today's downtown jobs as pins in each crew's colour (Start the 3D sim button, needs SUMO from `simulation/setup.bat`) |
 | System diagram | `dispatch/flow.mmd` | Analysis tab: how the pieces fit together (Mermaid) |
-| Dashboard | `dispatch/app.py` | Streamlit, three tabs. **Dispatch**: today's plan, map, crews and the update → replan loop. **Briefings**: the 8 a.m. briefing, one briefing per update, and an end-of-day overview. **Analysis**: agent vs FIFO on safety coverage, priority per crew and travel |
+| Dashboard | `dispatch/app.py` | Streamlit, three tabs. **Dispatch**: today's plan, map, crews and the update → replan loop (typed, or on an ElevenLabs voice call). **Briefings**: the 8 a.m. briefing, one briefing per update, and an end-of-day overview. **Analysis**: agent vs FIFO on safety coverage, priority per crew and travel |
 
 The planning is deterministic code. Claude only reads the supervisor's message and writes the
-briefing from numbers the code computed. Every parse is shown to the supervisor before it changes
-the plan.
+briefing from numbers the code computed; ElevenLabs only handles the voice (speech in, speech
+out). Every update shows what was understood and who read it (Claude or the rules), and **Undo**
+(or saying "undo" on a call) takes it back.
 
 ## Run it
 
@@ -102,6 +111,8 @@ python -m dispatch.run                    # rebuild the plans and outputs; print
 python -m streamlit run dispatch/app.py   # dashboard at http://localhost:8501
 python -m tests.test_core                 # 11 checks, including the numbers above
 python -m tests.sensitivity               # the ±1 weight table
+python -m tests.test_call                 # the voice call dialogue (no audio or key needed)
+python -m tests.test_voice                # the ElevenLabs calls, faked (no network or key needed)
 ```
 
 The output files are committed, so the dashboard also works without running the pipeline first.
@@ -110,6 +121,13 @@ The output files are committed, so the dashboard also works without running the 
 `.env` is gitignored. Without a key, or without internet, the app uses the rule-based parser,
 and template briefings, and labels them as such on screen. Check the key with
 `python -c "from dispatch.llm import has_api_key; print(has_api_key())"`.
+
+**ElevenLabs voice call (optional).** Put your ElevenLabs key after `ELEVENLABS_API_KEY=` in the
+same `.env` (the key needs Text to Speech and Speech to Text access; `ELEVENLABS_VOICE_ID` picks a
+different voice). A purple **ElevenLabs** badge and a **Start voice call** button then appear in
+the Report an update box. Allow the microphone when the browser asks; it works on
+`http://localhost:8501`, not on a network address. Without the key the button is hidden and typing
+works as before.
 
 **Briefings.** The Briefings tab shows the 8 a.m. briefing, then a short briefing after every crew
 change or new job, each timestamped. **Close out the day** consolidates them into one end-of-day
@@ -124,8 +142,12 @@ overview, and **Download today's briefings** saves the full set as a text file.
 - **No routing.** Jobs are assigned to crews, not sequenced into routes. Distance is straight
   line to a crew's zone centre. Street routing is Case 2.
 - **Every job is assumed to take the same time.** There are no crew skills or equipment.
-- **One disruption at a time.** Each replan starts again from the 8 a.m. plan. A blizzard
-  scenario is not implemented.
+- **Crew changes and new jobs only.** Updates stack through the day (each one builds on the
+  last, and Undo takes the latest back), but a city-wide event such as a blizzard is not
+  implemented.
+- **The voice call takes turns.** The agent doesn't listen while it's speaking, so you can't
+  interrupt it, and a reply starts about 2–3 s after you stop talking (longer for a new job,
+  which goes through Claude and an address lookup). English only; a quiet room or headset works best.
 - **Weights are our judgement,** not City policy. The sensitivity test shows the result doesn't
   hinge on any single weight.
 - **FIFO here ignores type for ordering,** but draws from the same 99 field-crew tickets as the
@@ -136,7 +158,7 @@ overview, and **Download today's briefings** saves the full set as a text file.
 | Path | Contents |
 |---|---|
 | `dispatch/` | The pipeline and dashboard above; `outputs/` holds the generated plans and briefings |
-| `tests/` | `test_core.py` (sanity checks and verified numbers), `sensitivity.py` (weight robustness) |
+| `tests/` | `test_core.py` (sanity checks and verified numbers), `sensitivity.py` (weight robustness), `test_call.py` and `test_voice.py` (the ElevenLabs voice call) |
 | `data/` | The 311 sample and its source notes |
 | `docs/` | Case brief, pitch outline, submission draft |
 | `agent_starter.py` | The organizers' starter, kept unmodified for reference (it contains the "ice" bug above) |

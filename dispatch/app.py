@@ -1,10 +1,12 @@
 """Streamlit demo: `streamlit run dispatch/app.py` (run `python -m dispatch.run` first)."""
+import base64
 import hashlib
 import html
 import json
 import math
 import re
 import sys
+import threading
 import time
 from collections import Counter
 from datetime import datetime
@@ -41,6 +43,12 @@ try:  # the score formula and its 0-10 display scale live in one place
     from dispatch import scoring  # noqa: E402
 except Exception:
     scoring = None
+
+try:  # ElevenLabs: report an update on a voice call instead of typing it
+    from dispatch import voice  # noqa: E402
+    from dispatch import call as voice_call  # noqa: E402
+except Exception:
+    voice = voice_call = None
 
 OUT = ROOT / "dispatch" / "outputs"
 CREW_COLORS = [  # one per crew, readable on a light basemap
@@ -167,13 +175,23 @@ def _source(kind: str) -> str:
     return "claude" if src == "claude" else "rules"
 
 
-def safe_parse(text: str, only_crew: int | None = None) -> tuple[dict | None, str | None]:
+def safe_parse(text: str, only_crew: int | None = None, quick: bool = False) -> tuple[dict | None, str | None]:
     """llm.parse_event(text) checked against the contract. Returns (event, error).
 
     only_crew: the supervisor already chose a crew (after "which one first?").
+    quick: the voice call, where every second counts. A plain crew update the rule-based parser
+    reads completely ("crew 4 is out", "crew 2 is down two guys") skips the Claude call (about
+    1.5 s); new jobs and anything unclear still go to Claude.
     """
     try:
-        ev = llm.parse_event(text, only_crew) if only_crew is not None else llm.parse_event(text)
+        ev = None
+        if quick:
+            rules = llm.regex_parse_event(text, only_crew)
+            if rules.get("event") in ("crew_out", "crew_partial") and rules.get("crew") in range(1, 9):
+                ev = rules
+                llm.last_source["parse"] = "rules: quick voice path"
+        if ev is None:
+            ev = llm.parse_event(text, only_crew) if only_crew is not None else llm.parse_event(text)
         if not isinstance(ev, dict) or ev.get("event") not in EVENTS:
             raise ValueError(f"unexpected result {ev!r}")
         if ev["event"] == "new_job":
@@ -231,6 +249,15 @@ def cached_briefing(key: str, *args, **kwargs) -> tuple[str, str]:
         shared, full = _shared_briefings(), f"{key}|{outputs_stamp()}|{claude_ready()}"
         if full in shared:
             store[key] = shared[full]
+        elif st.session_state.get("call") and st.session_state.call.get("active"):
+            # on a voice call the page must answer the next thing said at once, so the briefing is
+            # written in the background and shows up on the next update or when the call ends
+            writing = shared.setdefault("_writing", set())
+            if full not in writing:
+                writing.add(full)
+                threading.Thread(target=_write_briefing, args=(shared, full, args, kwargs), daemon=True).start()
+            return "Claude is writing this briefing. It shows up after the next update or when the call ends.", \
+                "pending"
         else:
             with st.spinner("Writing the briefing..."):
                 store[key] = safe_briefing(*args, **kwargs)
@@ -239,10 +266,21 @@ def cached_briefing(key: str, *args, **kwargs) -> tuple[str, str]:
     return store[key]
 
 
+def _write_briefing(shared: dict, full: str, args: tuple, kwargs: dict) -> None:
+    """Background half of cached_briefing during a call: write it and share it (no Streamlit calls here)."""
+    try:
+        result = safe_briefing(*args, **kwargs)
+        if result[1] == "claude" or not claude_ready():
+            shared[full] = result
+    finally:
+        shared["_writing"].discard(full)
+
+
 SOURCE_NOTES = {
     "claude": ":material/auto_awesome: Written by Claude from the plan's numbers.",
     "rules": ":material/rule: Rule-based template (Claude unavailable: no API key or no connection).",
     "numbers": ":material/info: Briefing service unavailable, showing the numbers only.",
+    "pending": ":material/hourglass_top: Written in the background while the voice call is on.",
 }
 
 BRIEF_COLORS = {"morning": "rgb(31,119,180)", "update": "rgb(255,127,14)", "day": "rgb(44,160,44)"}
@@ -327,6 +365,47 @@ def describe(event: dict) -> str:
         return (f"Crew {crew} is **short-handed** ({cap:.0%} capacity). "
                 f"It keeps its top {round(crew_limit(crew) * cap)} jobs; the rest will be reassigned or deferred.")
     return "I couldn't tell what changed."
+
+
+def voice_ready() -> bool:
+    """True when an ElevenLabs key is configured, so the voice call is offered."""
+    try:
+        return bool(voice and voice_call and voice.has_voice_key())
+    except Exception:
+        return False
+
+
+CALL_JS = ROOT / "dispatch" / "call_widget.js"
+
+
+@st.cache_resource
+def _call_widget(stamp: int):
+    return st.components.v2.component("citylink_voice_call", js=CALL_JS.read_text(encoding="utf-8"), css=CALL_CSS)
+
+
+def call_widget():
+    """The hands-free call widget (dispatch/call_widget.js), registered again only when the file changes."""
+    return _call_widget(CALL_JS.stat().st_mtime_ns)
+
+
+CALL_CSS = """
+.cl-call { display: flex; flex-direction: column; gap: 8px; font-family: var(--st-font, sans-serif); }
+.cl-btn { width: 100%; padding: 10px 14px; border-radius: 8px; border: 1px solid transparent; cursor: pointer;
+  font: 600 15px var(--st-font, sans-serif); color: #fff; background: rgb(44,160,44); }
+.cl-call:not([data-phase="idle"]) .cl-btn { background: #d33; }
+.cl-status { display: flex; align-items: center; gap: 8px; min-height: 20px; font-size: 14px;
+  color: var(--st-text-color, inherit); }
+.cl-call[data-phase="idle"] .cl-status, .cl-call[data-phase="idle"] .cl-meter { display: none; }
+.cl-dot { width: 10px; height: 10px; border-radius: 50%; background: #999; }
+.cl-call[data-phase="listening"] .cl-dot { background: #d33; animation: cl-pulse 1s infinite; }
+.cl-call[data-phase="speaking"] .cl-dot { background: rgb(44,160,44); }
+.cl-call[data-phase="thinking"] .cl-dot { background: #e6a700; }
+.cl-meter { height: 4px; border-radius: 2px; background: rgba(128,128,128,.2); overflow: hidden; }
+.cl-level { height: 100%; width: 0; background: #d33; transition: width 50ms linear; }
+.cl-note { font-size: 13px; color: #d33; }
+.cl-note:empty { display: none; }
+@keyframes cl-pulse { 50% { opacity: .35; } }
+"""
 
 
 def job_badges(job: dict, moved: set) -> None:
@@ -1037,6 +1116,8 @@ ss.setdefault("log", [])          # every update reported today, in order; the p
 ss.setdefault("pending", None)    # a new job whose location still has to be clicked on the map
 ss.setdefault("locating", None)   # a new job waiting for its address lookup
 ss.setdefault("pick_n", 0)
+ss.setdefault("call", None)       # the voice call: what's been said, and the reply the widget plays next
+ss.setdefault("call_reply_n", 0)  # numbers every spoken reply, so the widget plays each one once
 
 
 # --- the day's updates: parse -> (locate) -> apply, with no confirmation step ---
@@ -1091,6 +1172,100 @@ def _run(text: str, only_crew: int | None = None) -> None:
 def _submit() -> None:
     if ss.update_text.strip():
         _run(ss.update_text)
+
+
+def _call_say(text: str, end: bool = False) -> None:
+    """Queue the agent's next spoken line for the call widget. The widget streams it from ElevenLabs
+    through the local relay, so it starts playing before the whole reply is made; with no relay it
+    falls back to the browser's own voice."""
+    stream = voice.stream_token(text)
+    ss.call_reply_n += 1
+    ss.call.update(reply_id=ss.call_reply_n, reply_text=text, end=end, active=not end,
+                   reply_port=stream[0] if stream else None, reply_token=stream[1] if stream else None)
+
+
+def _call_turn(kind: str, payload: dict) -> None:
+    """One message from the call widget: the call started or ended, a silence, or something said."""
+    if kind == "start":
+        ss.call = {"state": voice_call.new_call(), "heard_error": None}
+        _call_say(voice_call.GREETING)
+        threading.Thread(target=_warm_claude, daemon=True).start()
+        return
+    if not ss.call:
+        return
+    if kind == "end":
+        ss.call.update(active=False, end=True)
+        return
+    heard = None
+    ss.call["heard_error"] = None
+    if kind == "utterance":
+        heard = voice.transcribe(base64.b64decode(payload.get("b64") or ""), "turn.webm",
+                                 payload.get("mime") or "audio/webm")
+        if heard is None and voice.last_error and "no speech" not in voice.last_error:
+            ss.call["heard_error"] = voice.last_error
+    reply, action = voice_call.step(ss.call["state"], heard, lambda text, crew: safe_parse(text, crew, quick=True),
+                                    day_live.locate)
+    kind = action[0] if action else None
+    if kind == "undo":
+        _call_undo()
+    elif kind in ("apply", "place"):
+        _, event, said, replace = action
+        if replace:  # "no, it was crew 3": the correction takes the place of the update just entered
+            _call_undo()
+        if kind == "apply":
+            _apply(event, said)
+            reply = voice_call.done_reply(event, ss.applied.get("effect", "") if ss.applied else "")
+        else:  # no address found: the job waits for a click on the map, as for a typed update
+            ss.pending = {"event": event, "received": said, "note": event["job"].get("locate_note") or ""}
+            ss.pick_n += 1
+            reply = voice_call.place_reply(event)
+        ss.call["state"]["turns"][-1] = ("agent", reply)
+    _call_say(reply, end=kind == "end")
+
+
+def _warm_claude() -> None:
+    """While the greeting plays: one throwaway update-reading call, so the first real one isn't slow.
+    Claude's first request with the update format after a quiet spell takes about 5 s; later ones
+    take 1.5 s. Calls _ask_claude directly so the parse cache and source labels stay untouched."""
+    try:
+        if claude_ready():
+            llm._ask_claude(llm._EVENT_SYSTEM, "pothole on 5 Ave SW", max_tokens=200, output_format=llm._EVENT_FORMAT)
+    except Exception:
+        pass  # only a warm-up: the real call has its own fallback
+
+
+def _call_undo() -> None:
+    """Take back what the call last entered: a job still waiting for its map click, or the last update."""
+    if ss.pending:
+        ss.pending = None
+    elif ss.log:
+        _undo()
+
+
+def render_call() -> None:
+    """Start/End call button, live status and the conversation so far."""
+    c = ss.call or {}
+    res = call_widget()(key="voice_call", data={k: c.get(k) for k in ("active", "reply_id", "reply_port",
+                                                                    "reply_token", "reply_text", "end")},
+                        on_utterance_change=lambda: None, on_event_change=lambda: None)
+    msg = res.get("utterance") or res.get("event")
+    if msg and msg.get("id") != ss.get("call_last_msg"):
+        ss.call_last_msg = msg.get("id")
+        with st.spinner("Thinking…"):
+            _call_turn("utterance" if res.get("utterance") else msg.get("type"), msg)
+        st.rerun()
+    if not c:
+        voice.warm(voice_call.COMMON_LINES)
+        st.caption("Talk it through instead of typing: the agent asks for anything it's missing and enters the "
+                   "update as soon as it's clear. Say “undo” to take one back.")
+        return
+    if c.get("heard_error"):
+        st.caption(f":material/error: Couldn't transcribe that turn ({c['heard_error']}).")
+    with st.container(height=220 if c.get("active") else "content", border=True):
+        for who, text in c["state"]["turns"][-8:]:
+            with st.chat_message("assistant" if who == "agent" else "user",
+                                 avatar=":material/support_agent:" if who == "agent" else ":material/person:"):
+                st.markdown(text)
 
 
 def _answer() -> None:
@@ -1226,6 +1401,7 @@ with tab_dispatch:
     with right:
         render_crew_list(plan, out_crews)
 
+        has_voice = voice_ready()
         st.subheader("Report an update")
         with st.container(horizontal=True, vertical_alignment="center"):
             st.caption("Crew changes and new urgent jobs. Every update builds on the last one and adds a briefing.")
@@ -1235,6 +1411,12 @@ with tab_dispatch:
             else:
                 st.badge("Rule-based", icon=":material/rule:", color="gray",
                          help="No ANTHROPIC_API_KEY on this machine: the rule-based parser reads updates.")
+            if has_voice:
+                st.badge("ElevenLabs", icon=":material/call:", color="violet",
+                         help="An ElevenLabs key is set: report an update on a voice call (Eleven v4 voice, "
+                              "Scribe v2 transcription).")
+        if has_voice:
+            render_call()
         with st.form("crew_update", clear_on_submit=True, border=False):
             st.text_area("Update", key="update_text", height=80, label_visibility="collapsed",
                          placeholder="e.g. crew 4 called in sick, or: sinkhole at 8 Ave SW and 4 St SW")

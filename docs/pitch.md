@@ -91,7 +91,9 @@ Before going on stage:
 - **Open the page once before you present.** The first load after starting Streamlit waits for
   Claude to write the 8 a.m. briefing (5–10 s); after that it's instant for everyone.
 - Check the badge next to **Report an update**: green **Claude** means the key works; grey
-  **Rule-based** means you're offline. That's fine, but say so if asked.
+  **Rule-based** means you're offline. That's fine, but say so if asked. A purple **ElevenLabs**
+  badge means the voice call is available (allow the microphone when the browser asks; it only works
+  on `localhost`, not a LAN address). Turn the volume up, and use a quiet spot or a headset mic.
 - On venue wifi with no internet, set `USE_LLM = False` in `dispatch/llm.py`. Otherwise each
   Claude attempt waits for a timeout before falling back.
 - 3D downtown (optional): on the **Analysis** tab, click **Start the 3D sim** about 15 s before
@@ -113,9 +115,12 @@ Before going on stage:
    - **Deferred today** shows **6**, "**0 safety** · 6 moved to other crews".
 5. **Read the new Latest briefing** (Update 1). Say: "The supervisor gets a plain-English update
    after every change."
-6. *(If time allows)* type `someone called in sick` and submit. The agent asks "Which crew…?"
-   instead of guessing. Type `4` in the answer box. *(Or a second update:*
-   `crew 2 is down two guys today, we're short-handed` *→ crew 2 at 50%.)*
+6. **Voice call** *(if the ElevenLabs badge is on)*: click **Start voice call**. The agent says
+   "City Link dispatch. What's the update?" Say *"someone called in sick"* and pause. It asks which
+   crew instead of guessing; say *"four"*. It enters the update straight away, says what changed and
+   asks "Anything else?". Say *"undo"* to take it back, or *"no, it was crew 3"* to fix it; say
+   *"no, that's all"* to hang up. *(Without voice, type* `someone called in sick` *and answer* `4`
+   *in the box.)*
 7. **Briefings tab:** the 8 a.m. briefing and one card per update. Click **Close out the day** to
    show the end-of-day overview.
 8. **Analysis tab:** "30 vs 16" safety hazards against oldest-first, the improvement round

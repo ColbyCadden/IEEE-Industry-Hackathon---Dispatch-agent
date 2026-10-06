@@ -2,6 +2,8 @@
 
 IEEE YP Industry Hackathon · Software and Computational Math · Case 1 ([case brief](docs/CASE_BRIEF.md))
 
+**Demo video:** https://youtu.be/U1Zz6N5E05M
+
 Oldest-first (FIFO) dispatch is fair to the queue, not to the public: a missing stop sign waits
 behind yesterday's parking complaint. This agent scores open 311 tickets by hazard, assigns a day
 of work to 8 crews (32 workers, sized by workload), and replans when a crew calls in sick. It then tells the Roads
@@ -35,6 +37,26 @@ supervisor what changed, in plain English.
 - **Starter bug we caught:** the starter's `"ice" in name` check matches "Serv**ice**s" and
   "L**ice**nce". Its "priority" plan spent 28 of 40 slots on cart deliveries, commercial
   collection and licence inspections, and scheduled 23 already-closed tickets.
+
+## Screenshots
+
+The dashboard on the frozen sample, with Claude reading updates and the ElevenLabs voice call available.
+
+**1. The 8 a.m. plan.** Eight crews, 48 jobs, 30 safety tickets. Colour = crew, large dot = safety ticket. Claude writes the morning briefing under the map.
+
+![8 a.m. plan on the map](docs/screenshots/01_8am_plan_map.png)
+
+**2. One crew's day.** Click a crew to focus the map on it and see its jobs in priority order (priority out of 10).
+
+![Crew 2 selected: its five jobs in priority order](docs/screenshots/02_crew_selected.png)
+
+**3. Agent vs oldest-first (FIFO).** 30 safety tickets covered against 16, with the improvement round: baseline, our plan, and the plan after crew 4 calls in sick.
+
+![Agent vs FIFO comparison and improvement round](docs/screenshots/03_fifo_vs_agent.png)
+
+**4. A sick call, replanned.** "hey, crew 4 here, we're all out sick today, can't make it" is read by Claude and applied straight away: crew 4's jobs move to nearby crews (42 jobs on the plan, 6 moved, 6 lower-priority deferred, 0 safety dropped), with a new briefing for the supervisor.
+
+![Noon plan after crew 4 calls in sick](docs/screenshots/04_noon_plan_after_sick_call.png)
 
 ## How it works
 
